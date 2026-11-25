@@ -6,8 +6,10 @@ on that reel's own stop. So for every symbol and run length,
 
     E[ways win] = pay * E[c_1] * ... * E[c_L] * P(c_{L+1} = 0)
 
-and the base-game RTP is exact after a few milliseconds of arithmetic. `enumerate_base` checks this
-by brute force over every stop combination (the "full cycle").
+and the base-game RTP is exact after a few milliseconds of arithmetic. The Static reveal is drawn
+independently of the stops too, so conditioning on the revealed symbol keeps the formula exact:
+average the result over every reveal outcome, weighted by its probability. `enumerate_base` checks
+this by brute force over every stop combination (the "full cycle").
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from .config import (
     PAYTABLE,
     REELS,
     ROWS,
+    STATIC,
     WILD,
     WIN_BUCKET_EDGES,
     Model,
@@ -32,18 +35,22 @@ from .engine import bucket
 N_ROW_MASKS = 1 << ROWS
 
 
-def windows(reelset: ReelSet, r: int) -> np.ndarray:
-    """All visible 5-symbol windows of reel r, one per stop: shape [n_stops, ROWS]."""
+def windows(reelset: ReelSet, r: int, reveal: int | None = None) -> np.ndarray:
+    """All visible 5-symbol windows of reel r, one per stop: shape [n_stops, ROWS].
+    With `reveal`, every Static in the window is replaced by that symbol."""
     n = int(reelset.lens[r])
     idx = (np.arange(n)[:, None] + np.arange(ROWS)[None, :]) % n
-    return reelset.strips[r, :n][idx]
+    w = reelset.strips[r, :n][idx]
+    if reveal is not None:
+        w = np.where(w == STATIC, reveal, w)
+    return w
 
 
 def _row_mask(R: int) -> np.ndarray:
     return np.array([(R >> k) & 1 for k in range(ROWS)], dtype=bool)
 
 
-def count_tables(reelset: ReelSet):
+def count_tables(reelset: ReelSet, reveal: int | None = None):
     """Ec[r, R, s] = E[c] and P0[r, R, s] = P(c == 0) over reel r's stops.
 
     c = cells on reel r that show symbol s or a Glitch Wild, or that lie in a wild row (bitmask R).
@@ -51,7 +58,7 @@ def count_tables(reelset: ReelSet):
     Ec = np.zeros((REELS, N_ROW_MASKS, N_PAYING))
     P0 = np.zeros((REELS, N_ROW_MASKS, N_PAYING))
     for r in range(REELS):
-        w = windows(reelset, r)
+        w = windows(reelset, r, reveal)
         for R in range(N_ROW_MASKS):
             wild = (w == WILD) | _row_mask(R)[None, :]
             for s in range(N_PAYING):
@@ -116,22 +123,31 @@ def core_count_distribution(p: np.ndarray) -> np.ndarray:
 
 def base_game_exact(model: Model, paytable=PAYTABLE) -> dict:
     """Exact base-game RTP (ways wins only) and exact bonus trigger probabilities."""
-    Ec, P0 = count_tables(model.base)
-    by_drops = []
-    for n in range(3):
-        by_drops.append(
+    rv_syms, _, rv_p = model.reveal_table("base")
+    ow_p = model.override_probs("base")
+    ow_p = np.pad(ow_p, (0, 3 - len(ow_p)))
+    by_drops = np.zeros(3)  # mean win given 0 / 1 / 2 Override Wilds, averaged over reveals
+    by_reveal = {}
+    for m, pm in zip(rv_syms.tolist(), rv_p):
+        Ec, P0 = count_tables(model.base, m)
+        e = np.array([
             sum(p * expected_win(Ec, P0, paytable, R, cr) for cr, R, p in override_configs(n))
-        )
-    probs = model.override_probs("base")
-    probs = np.pad(probs, (0, 3 - len(probs)))
+            for n in range(3)
+        ])
+        by_drops += pm * e
+        by_reveal[m] = float(e[0])
+    Ec0, P00 = count_tables(model.base, None)  # Static left unrevealed: pays nothing
+    no_static_rtp = expected_win(Ec0, P00, paytable, 0, frozenset())
     core_p = core_probabilities(model.base)
     dist = core_count_distribution(core_p)
     return {
-        "rtp_no_override": by_drops[0],
-        "mean_win_one_override": by_drops[1],
-        "mean_win_two_overrides": by_drops[2],
-        "override_probs": probs.tolist(),
-        "rtp_base_ways": float(np.dot(probs, by_drops)),
+        "rtp_no_override": float(by_drops[0]),
+        "rtp_static_as_blank": float(no_static_rtp),
+        "rtp_no_override_by_reveal": by_reveal,
+        "mean_win_one_override": float(by_drops[1]),
+        "mean_win_two_overrides": float(by_drops[2]),
+        "override_probs": ow_p.tolist(),
+        "rtp_base_ways": float(np.dot(ow_p, by_drops)),
         "core_prob_by_reel": core_p.tolist(),
         "p_cores": dist.tolist(),
         "p_trigger": [float(dist[3]), float(dist[4]), float(dist[5])],
@@ -139,12 +155,12 @@ def base_game_exact(model: Model, paytable=PAYTABLE) -> dict:
 
 
 # ---- Brute-force full cycle (independent check) -----------------------------
-def _count_table_for(reelset: ReelSet, R: int, cross_reels: frozenset) -> np.ndarray:
+def _count_table_for(reelset: ReelSet, R: int, cross_reels: frozenset, reveal=None) -> np.ndarray:
     """cnt[r, stop, s] = cells counting for s on reel r at that stop (s, wild, wild row, cross)."""
     n_max = int(reelset.lens.max())
     cnt = np.zeros((REELS, n_max, N_PAYING), dtype=np.int64)
     for r in range(REELS):
-        w = windows(reelset, r)
+        w = windows(reelset, r, reveal)
         n = w.shape[0]
         if r in cross_reels:
             cnt[r, :n, :] = ROWS
@@ -199,10 +215,11 @@ def _enumerate(cnt, lens, paytable, edges):
 
 
 def enumerate_base(
-    model: Model, R: int = 0, cross_reels: frozenset = frozenset(), paytable=PAYTABLE
+    model: Model, R: int = 0, cross_reels: frozenset = frozenset(), reveal=None, paytable=PAYTABLE
 ) -> dict:
-    """Every stop combination of the base reels, for one fixed Override Wild configuration."""
-    cnt = _count_table_for(model.base, R, cross_reels)
+    """Every stop combination of the base reels, for one fixed Override Wild configuration and one
+    revealed symbol."""
+    cnt = _count_table_for(model.base, R, cross_reels, reveal)
     lens = model.base.lens
     sums, sq, hits, hist = _enumerate(cnt, lens, paytable, WIN_BUCKET_EDGES)
     n = float(np.prod(lens.astype(np.float64)))

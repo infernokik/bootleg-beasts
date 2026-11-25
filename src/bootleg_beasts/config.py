@@ -18,11 +18,12 @@ ROWS = 5
 H1, H2, H3, H4, L1, L2, L3, L4, L5 = range(9)
 WILD = 9  # Glitch Wild: substitutes for every paying symbol
 OVERRIDE = 10  # Override Wild: dropped onto reels 2-4 by the feature, turns its row and column wild
-CORE = 11  # Capture Core: scatter, 3/4/5 trigger the bonus tiers
-STATIC = 12  # Static: non-paying tile, bonus reels only
+CORE = 11  # Capture Core: scatter, 3/4/5 trigger the bonus at level 1/2/3
+STATIC = 12  # Static: mystery symbol, every Static on screen reveals the same random symbol
+REACTOR = 13  # Reactor: bonus only, collect 3 to level up
 N_PAYING = 9
 
-CODES = ["H1", "H2", "H3", "H4", "L1", "L2", "L3", "L4", "L5", "W", "OW", "S", "X"]
+CODES = ["H1", "H2", "H3", "H4", "L1", "L2", "L3", "L4", "L5", "W", "OW", "S", "X", "R"]
 NAMES = [
     "Sparkjaw",
     "Blazegob",
@@ -37,6 +38,7 @@ NAMES = [
     "Override Wild",
     "Capture Core",
     "Static",
+    "Reactor",
 ]
 CODE_TO_ID = {code: i for i, code in enumerate(CODES)}
 
@@ -56,46 +58,84 @@ PAYTABLE = np.zeros((N_PAYING, REELS + 1), dtype=np.float64)
 for _sym, _pays in _PAYS.items():
     PAYTABLE[_sym, 3:] = _pays
 
-MAX_WIN = 10_000.0
+MAX_WIN = 5_000.0
 OVERRIDE_REELS = (1, 2, 3)  # 0-based, i.e. reels 2-4
 
 # Win-size buckets used by every report (x bet). A win w falls in bucket (edge[i-1], edge[i]].
 WIN_BUCKET_EDGES = np.array(
-    [0.5, 1, 2, 5, 10, 20, 50, 100, 250, 500, 1000, 2500, 5000, 10000], dtype=np.float64
+    [0.5, 1, 2, 5, 10, 20, 50, 100, 250, 500, 1000, 2500, 5000], dtype=np.float64
 )
 
 
-STICKY_NONE = 0  # crosses are wild for the spin they land on only
-STICKY_COLUMN = 1  # the Override Wild's column stays wild for the rest of the bonus
-STICKY_CROSS = 2  # the whole cross (row and column) stays wild for the rest of the bonus
+# ---- Bonus: one bonus with four levels ----------------------------------------
+@dataclass(frozen=True)
+class Level:
+    key: str
+    name: str
+    mult: int  # every win in this level is multiplied by this
+    override_shape: int  # what an Override Wild turns wild: 1 = its column, 2 = its row and column
+    sticky_wilds: bool  # Glitch Wilds that land stay wild for the rest of the bonus
+    sticky_crosses: bool  # Override Wild columns/crosses stay wild for the rest of the bonus
+    override_factor: float  # Override drop chance relative to level 1
+
+
+SHAPE_COLUMN = 1
+SHAPE_CROSS = 2
+
+LEVELS = (
+    Level("street_hunt", "Street Hunt", 1, SHAPE_COLUMN, False, False, 1.0),
+    Level("night_raid", "Night Raid", 1, SHAPE_COLUMN, False, False, 1.0),
+    Level("lockdown", "Lockdown", 1, SHAPE_COLUMN, False, True, 1.0),
+    Level("overload", "Overload", 1, SHAPE_CROSS, True, False, 1.0),
+)
+
+# Beast capture (bonus only): each beast (H1-H4) under a freshly dropped Override Wild's column or
+# cross is captured and adds a random amount to that spin's multiplier (which starts at x1).
+# Per level: (values, weights).
+CAPTURE = (
+    ((1, 2, 0), (4, 1, 0)),
+    ((1, 2, 0), (3, 1, 0)),
+    ((1, 2, 3), (4, 2, 1)),
+    ((1, 2, 3), (3, 2, 1)),
+)
+# Guaranteed minimum bonus win (x bet) by starting level.
+MIN_BONUS_WIN = (20.0, 50.0, 120.0, 250.0)
+FREE_SPINS = 10
+REACTORS_PER_LEVEL = 3  # collect this many Reactors to reach the next level
+LEVEL_UP_SPINS = 4  # extra free spins awarded on each level-up
+START_LEVEL = {3: 0, 4: 1, 5: 2}  # Capture Cores -> starting level (0-based)
 
 
 @dataclass(frozen=True)
-class Tier:
+class Buy:
     key: str
     name: str
-    cores: int
-    free_spins: int
-    sticky_mode: int
-    mult_step: int
-    preplaced_crosses: int
-    guaranteed_cross: bool  # if no Override Wild has landed, one drops on the last free spin
-    buy_price: float | None
+    start_level: int
 
 
-TIERS = (
-    Tier("street_hunt", "Street Hunt", 3, 10, STICKY_NONE, 0, 0, True, 100.0),
-    Tier("night_raid", "Night Raid", 4, 10, STICKY_COLUMN, 1, 0, True, 300.0),
-    Tier("legendary", "Legendary Capture", 5, 10, STICKY_CROSS, 2, 1, False, None),
-)
-REEL_SET_KEYS = ("base",) + tuple(t.key for t in TIERS)
-RETRIGGER_CORES = 3
-RETRIGGER_SPINS = 4
+BUYS = (Buy("bonus", "Bonus", 0), Buy("super", "Super Bonus", 1))
 
 MODEL_PATH = Path(__file__).with_name("model.json")
 
 
-# ---- Model (reel strips + Override Wild weights) -----------------------------
+def capture_arrays():
+    """Capture values [level, i] and cumulative weights [level, i] for Numba."""
+    vals = np.array([v for v, _ in CAPTURE], dtype=np.int64)
+    cum = np.cumsum(np.array([w for _, w in CAPTURE], dtype=np.int64), axis=1)
+    return vals, cum
+
+
+def level_arrays():
+    """Level rules as flat arrays for Numba kernels."""
+    return (
+        np.array([lv.mult for lv in LEVELS], dtype=np.int64),
+        np.array([lv.override_shape for lv in LEVELS], dtype=np.int64),
+        np.array([lv.sticky_wilds for lv in LEVELS], dtype=np.bool_),
+        np.array([lv.sticky_crosses for lv in LEVELS], dtype=np.bool_),
+    )
+
+
+# ---- Model (reel strips + feature weights) -----------------------------------
 @dataclass
 class ReelSet:
     strips: np.ndarray  # int8 [REELS, max_len], padded
@@ -118,10 +158,12 @@ class ReelSet:
 @dataclass
 class Model:
     version: str
-    # Reel set per mode: "base" plus one per bonus tier key.
-    reels: dict[str, ReelSet]
-    # Weights for dropping 0, 1 or 2 Override Wilds on a spin, per mode.
+    reels: dict[str, ReelSet]  # "base" and "bonus"
+    # Weights for dropping 0, 1 or 2 Override Wilds on a spin: "base" and one list per level.
     override_weights: dict[str, list[int]]
+    # What Static reveals into: symbol code -> weight, for "base" and "bonus".
+    reveal_weights: dict[str, dict[str, int]]
+    buy_prices: dict[str, float]
 
     @property
     def base(self) -> ReelSet:
@@ -134,19 +176,22 @@ class Model:
         w = np.array(self.override_weights[mode], dtype=np.float64)
         return w / w.sum()
 
-    def tier_reels(self):
-        """All bonus reel sets stacked for Numba: strips [tier, reel, pos], lens [tier, reel]."""
-        sets = [self.reels[t.key] for t in TIERS]
-        max_len = max(s.strips.shape[1] for s in sets)
-        strips = np.full((len(sets), REELS, max_len), -1, dtype=np.int8)
-        for i, s in enumerate(sets):
-            strips[i, :, : s.strips.shape[1]] = s.strips
-        return strips, np.stack([s.lens for s in sets])
+    def level_override_cum(self) -> np.ndarray:
+        return np.stack([self.override_cum(lv.key) for lv in LEVELS])
+
+    def reveal_table(self, mode: str):
+        """(symbol ids, cumulative weights) for Numba, and (ids, probabilities) for exact maths."""
+        items = self.reveal_weights[mode]
+        syms = np.array([CODE_TO_ID[c] for c in items], dtype=np.int64)
+        w = np.array(list(items.values()), dtype=np.int64)
+        return syms, np.cumsum(w), w / w.sum()
 
     def save(self, path: Path = MODEL_PATH) -> None:
         data = {
             "version": self.version,
+            "buy_prices": self.buy_prices,
             "override_weights": self.override_weights,
+            "reveal_weights": self.reveal_weights,
             "reels": {k: v.to_codes() for k, v in self.reels.items()},
         }
         path.write_text(json.dumps(data, indent=1), encoding="utf-8")
@@ -158,15 +203,6 @@ class Model:
             version=data["version"],
             reels={k: ReelSet.from_codes(v) for k, v in data["reels"].items()},
             override_weights=data["override_weights"],
+            reveal_weights=data["reveal_weights"],
+            buy_prices=data["buy_prices"],
         )
-
-
-def tier_arrays():
-    """Bonus rules as flat arrays, for passing into Numba kernels."""
-    return (
-        np.array([t.free_spins for t in TIERS], dtype=np.int64),
-        np.array([t.sticky_mode for t in TIERS], dtype=np.int64),
-        np.array([t.mult_step for t in TIERS], dtype=np.int64),
-        np.array([t.preplaced_crosses for t in TIERS], dtype=np.int64),
-        np.array([t.guaranteed_cross for t in TIERS], dtype=np.bool_),
-    )
