@@ -1,16 +1,17 @@
-# Glitch Tamers — Game Design & Math Spec
+# Bootleg Beasts — Game Design & Math Spec
 
-**Status:** v0.2, tuned. The math model is in [`src/glitch_tamers/model.json`](../src/glitch_tamers/model.json),
+**Status:** v0.2, tuned. The math model is in [`src/bootleg_beasts/model.json`](../src/bootleg_beasts/model.json),
 built by [`sims/tune.py`](../sims/tune.py) and verified by [`sims/verify.py`](../sims/verify.py).
-**Working title:** *Glitch Tamers*. Check that no released slot uses this name before publishing.
+**Title:** *Bootleg Beasts*. No released slot with this name turned up in a search in November 2026.
 
 ---
 
 ## 1. Concept
 
-A neon megacity where rogue digital creatures ("Glitchlings") have escaped a corporate lab. You're an
-underground tamer catching them with stolen Capture Cores. The tone is gritty, dark and a little
-absurd, in the high-volatility style of modern Hacksaw and Nolimit City games.
+A black-market toy stall in a rain-soaked neon alley sells cheap knock-off monster toys. Something
+went wrong at the bootleg factory, and the knock-offs are alive. You're a back-alley tamer catching
+them with stolen Capture Cores before they glitch out of their blister packs. The tone is gritty, dark
+and a little absurd, in the high-volatility style of modern Hacksaw and Nolimit City games.
 
 **Art direction: bootleg monster merch.** The game is a parody of cheap knock-off monster toys.
 Premium symbols are off-model bootleg figures in blister packs: googly or mismatched eyes, visible
@@ -272,7 +273,7 @@ Static made Night Raid *worse* (median 196× → 150×), so Night Raid keeps the
 
 ## 9. Decisions still open
 
-1. **Name and art direction.** *Glitch Tamers* is a placeholder.
+1. **Name and art direction.** *Bootleg Beasts* is a placeholder.
 2. **Night Raid price.** 300× works (median about 196×). A 400–500× version with a stronger feature
    is possible.
 3. **Optional extras for later:** an ante bet (higher bet for more frequent bonuses), and Glitch Wilds

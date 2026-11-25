@@ -14,8 +14,8 @@ from pathlib import Path
 
 import numpy as np
 
-from glitch_tamers import engine
-from glitch_tamers.config import (
+from bootleg_beasts import engine
+from bootleg_beasts.config import (
     CODES,
     MAX_WIN,
     N_PAYING,

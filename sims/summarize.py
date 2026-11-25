@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from glitch_tamers.config import TIERS
+from bootleg_beasts.config import TIERS
 
 REPORTS = Path(__file__).resolve().parent.parent / "reports"
 

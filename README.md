@@ -1,4 +1,4 @@
-# Glitch Tamers — Slot Math & Simulation
+# Bootleg Beasts — Slot Math & Simulation
 
 A high-volatility 5×5, 3,125-ways slot. Its **cross wild** turns its whole row and column wild, and
 **three bonus tiers** are triggered by 3, 4 or 5 scatters. The top tier is hidden and can't be
@@ -45,7 +45,7 @@ about **55 million game rounds per second** on a 12-core desktop (10¹⁰ spins 
 ## Layout
 
 ```
-src/glitch_tamers/
+src/bootleg_beasts/
   config.py     symbols, paytable, bonus rules, model loading
   engine.py     Numba kernels: ways evaluation, cross wild, base spin, bonus round, batch simulators
   exact.py      exact base-game RTP (factorised) + brute-force full-cycle check

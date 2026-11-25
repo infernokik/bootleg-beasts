@@ -17,8 +17,8 @@ from pathlib import Path
 
 import numpy as np
 
-from glitch_tamers import exact, sim
-from glitch_tamers.config import MAX_WIN, TIERS, WIN_BUCKET_EDGES, Model
+from bootleg_beasts import exact, sim
+from bootleg_beasts.config import MAX_WIN, TIERS, WIN_BUCKET_EDGES, Model
 
 REPORTS = Path(__file__).resolve().parent.parent / "reports"
 

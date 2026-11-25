@@ -1,4 +1,4 @@
-// Glitch Tamers: browser UI. Every outcome comes from engine.js, which uses the same reel strips,
+// Bootleg Beasts: browser UI. Every outcome comes from engine.js, which uses the same reel strips,
 // weights and rules as the verified Python model (game-data.json).
 import { Game, WILD, OVERRIDE, CORE } from "./engine.js";
 import { svgFor } from "./symbols.js";
@@ -32,7 +32,7 @@ const ui = {
 const store = {
   get(k, d) {
     try {
-      const v = localStorage.getItem("gt." + k);
+      const v = localStorage.getItem("bb." + k);
       return v === null ? d : JSON.parse(v);
     } catch {
       return d;
@@ -40,7 +40,7 @@ const store = {
   },
   set(k, v) {
     try {
-      localStorage.setItem("gt." + k, JSON.stringify(v));
+      localStorage.setItem("bb." + k, JSON.stringify(v));
     } catch {
       /* private mode */
     }
@@ -400,7 +400,7 @@ function buildInfo() {
     data.paytable[sym.code].map((p) => `<td>${fmt(p * b)}</td>`).join("") + "</tr>").join("");
   const stat = (v, label) => `<div class="stat"><b>${v}</b><span>${label}</span></div>`;
   ui.infoBody.innerHTML = `
-    <h2>Glitch Tamers</h2>
+    <h2>Bootleg Beasts</h2>
     <p>5 reels × 5 rows, <b>3,125 ways</b>. Wins pay left to right for 3 or more matching symbols on
     adjacent reels, starting from reel 1. Each win is the pay per way × the number of ways (on every
     reel in the run, count the matching symbols plus wilds, then multiply).</p>

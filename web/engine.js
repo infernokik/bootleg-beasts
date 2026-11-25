@@ -1,4 +1,4 @@
-// Glitch Tamers game engine: a line-for-line port of src/glitch_tamers/engine.py.
+// Bootleg Beasts game engine: a line-for-line port of src/bootleg_beasts/engine.py.
 // All amounts are multiples of the bet. The UI multiplies by the bet size.
 // selftest.html checks this file against the Python engine.
 

@@ -8,7 +8,7 @@ Order of work (each step only depends on the ones before it):
      Legendary Capture uses Night Raid's drop rate.
   4. Base drop rate, exact: base RTP is linear in the drop rate, so solve
      (1 - q) * E0 + q * E1 = 96% - sum_t P(tier t) * E[tier t payout].
-  5. Save the model to src/glitch_tamers/model.json.
+  5. Save the model to src/bootleg_beasts/model.json.
 
 Run:  .venv\\Scripts\\python.exe sims\\tune.py
 """
@@ -19,9 +19,9 @@ import time
 
 import numpy as np
 
-from glitch_tamers import exact, sim
-from glitch_tamers.config import MODEL_PATH, REELS, TIERS, Model, ReelSet
-from glitch_tamers.reelgen import build_strip
+from bootleg_beasts import exact, sim
+from bootleg_beasts.config import MODEL_PATH, REELS, TIERS, Model, ReelSet
+from bootleg_beasts.reelgen import build_strip
 
 TARGET_RTP = 0.9600
 TARGET_BUY_RTP = 0.9620

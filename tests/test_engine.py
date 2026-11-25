@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 from numba import njit
 
-from glitch_tamers import engine, exact
-from glitch_tamers.config import (
+from bootleg_beasts import engine, exact
+from bootleg_beasts.config import (
     CODE_TO_ID,
     CORE,
     H1,
