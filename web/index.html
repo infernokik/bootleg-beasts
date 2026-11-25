@@ -8,7 +8,8 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpolygon points='32,4 56,18 56,46 32,60 8,46 8,18' fill='%231b1404' stroke='%23ffc531' stroke-width='4'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%23ffc531'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
 </head>
-<body data-repo="">
+<body data-repo="https://github.com/infernokik/bootleg-beasts">
+  <canvas id="bg" aria-hidden="true"></canvas>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <defs>
       <!-- bootleg-toy packaging -->
@@ -47,6 +48,7 @@
       </div>
       <div class="grid-wrap">
         <div class="grid" id="grid" aria-label="Reels, 5 by 5"></div>
+        <div class="ovl" id="ovl" aria-hidden="true"></div>
         <div class="banner" id="banner" hidden><div class="banner-title" id="bannerTitle"></div><div class="banner-sub" id="bannerSub"></div></div>
       </div>
       <p class="ticker" id="ticker" aria-live="polite">Spin to start. Land 3 Capture Cores for a bonus.</p>

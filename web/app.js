@@ -2,6 +2,14 @@
 // weights and rules as the verified Python model (game-data.json).
 import { Game, WILD, OVERRIDE, CORE } from "./engine.js";
 import { symbolHTML } from "./symbols.js";
+import { Fx, shake, glitchHit } from "./fx.js";
+import { startBackground } from "./background.js";
+
+try {
+  startBackground(document.getElementById("bg"));
+} catch (err) {
+  console.warn("background disabled:", err); // decoration only: never block the game
+}
 
 const data = await (await fetch("game-data.json")).json();
 const game = new Game(data);
@@ -21,7 +29,7 @@ const FEATURE_TEXT = {
 // ---- State & helpers -----------------------------------------------------------
 const $ = (id) => document.getElementById(id);
 const ui = {
-  grid: $("grid"), banner: $("banner"), bannerTitle: $("bannerTitle"), bannerSub: $("bannerSub"),
+  grid: $("grid"), wrap: document.querySelector(".grid-wrap"), ovl: $("ovl"), banner: $("banner"), bannerTitle: $("bannerTitle"), bannerSub: $("bannerSub"),
   ticker: $("ticker"), balance: $("balance"), win: $("win"), bet: $("bet"), spin: $("spinBtn"),
   betUp: $("betUp"), betDown: $("betDown"), buys: [$("buy0"), $("buy1")],
   buyCosts: [$("buyCost0"), $("buyCost1")], turbo: $("turbo"), auto: $("auto"), refill: $("refill"),
@@ -62,107 +70,178 @@ const bump = (el) => {
   el.classList.add("bump");
 };
 
-// ---- Grid ------------------------------------------------------------------------
+// ---- Reels & overlay -----------------------------------------------------------------
+// Each reel is a window onto a strip of cells that scrolls during a spin. The overlay grid above
+// the reels holds everything that must not scroll: Override Wilds, wild crosses, locked wilds and
+// win frames.
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const fx = new Fx(ui.wrap);
+const reels = [];
 const cells = Array.from({ length: R }, () => []);
+const ocells = Array.from({ length: R }, () => []);
+for (let r = 0; r < R; r++) {
+  const el = document.createElement("div");
+  el.className = "reel";
+  const strip = document.createElement("div");
+  strip.className = "strip";
+  el.appendChild(strip);
+  ui.grid.appendChild(el);
+  reels.push({ el, strip });
+}
 for (let k = 0; k < K; k++) {
   for (let r = 0; r < R; r++) {
-    const c = document.createElement("div");
-    c.className = "cell";
-    c.setAttribute("role", "img");
-    ui.grid.appendChild(c);
-    cells[r][k] = c;
+    const o = document.createElement("div");
+    o.className = "ocell";
+    ui.ovl.appendChild(o);
+    ocells[r][k] = o;
   }
 }
-const allCells = () => cells.flat();
 
-function setSym(cell, sym) {
-  const code = CODES[sym];
-  if (cell.dataset.sym === code) return;
-  cell.dataset.sym = code;
-  cell.innerHTML = symbolHTML(code);
-  cell.setAttribute("aria-label", NAMES[sym]);
+function makeCell(sym) {
+  const c = document.createElement("div");
+  c.className = "cell";
+  c.setAttribute("role", "img");
+  c.dataset.sym = CODES[sym];
+  c.setAttribute("aria-label", NAMES[sym]);
+  c.innerHTML = symbolHTML(CODES[sym]);
+  return c;
+}
+
+function setColumn(r, col) {
+  const fresh = col.map(makeCell);
+  reels[r].strip.replaceChildren(...fresh);
+  cells[r] = fresh;
+}
+
+function cellPitch() {
+  const [a, b] = reels[0].strip.children;
+  return b.offsetTop - a.offsetTop;
 }
 
 function clearFx(keepSticky = false) {
   ui.grid.classList.remove("has-win");
-  for (const c of allCells()) {
-    c.classList.remove("win", "wildcell", "ow-drop", "core-hit", "land", "spinning");
-    if (!keepSticky) c.classList.remove("sticky", "ow-origin");
-    c.style.removeProperty("--d");
-  }
-}
-
-function renderSticky(sticky, origins) {
-  for (let r = 0; r < R; r++) {
-    for (let k = 0; k < K; k++) {
-      const c = cells[r][k];
-      if (!sticky[r][k]) continue;
-      const origin = origins.some(([rr, kk]) => rr === r && kk === k);
-      setSym(c, origin ? OVERRIDE : WILD);
-      c.classList.add("sticky");
-      c.classList.toggle("ow-origin", origin);
+  for (const col of cells) for (const c of col) c.classList.remove("win", "land");
+  for (const col of ocells) {
+    for (const o of col) {
+      o.classList.remove("win", "wildcell", "ow-drop", "core-hit", "lock-in");
+      o.style.removeProperty("--d");
+      if (!keepSticky) o.classList.remove("sticky", "ow-origin");
+      if (!o.classList.contains("sticky")) o.replaceChildren();
     }
   }
 }
 
-function animateReels(key, grid, sticky) {
-  const strips = game.reelSets[key];
-  const locked = (r, k) => sticky && sticky[r][k];
-  for (let r = 0; r < R; r++) for (let k = 0; k < K; k++) if (!locked(r, k)) cells[r][k].classList.add("spinning");
-  const stopped = new Array(R).fill(false);
-  const t0 = performance.now();
-  let lastSwap = 0;
-  return new Promise((resolve) => {
-    const frame = (now) => {
-      const t = now - t0;
-      const swap = now - lastSwap > 70;
-      if (swap) lastSwap = now;
-      let done = true;
-      for (let r = 0; r < R; r++) {
-        if (stopped[r]) continue;
-        if (t >= (420 + r * 140) * speed()) {
-          stopped[r] = true;
-          for (let k = 0; k < K; k++) {
-            if (locked(r, k)) continue;
-            const c = cells[r][k];
-            c.classList.remove("spinning", "land");
-            setSym(c, grid[r][k]);
-            void c.offsetWidth;
-            c.classList.add("land");
-          }
-        } else {
-          done = false;
-          if (swap) {
-            const strip = strips[r];
-            const off = Math.floor(Math.random() * strip.length); // cosmetic only
-            for (let k = 0; k < K; k++) if (!locked(r, k)) setSym(cells[r][k], strip[(off + k) % strip.length]);
-          }
+function renderSticky(sticky, origins, animate) {
+  for (let r = 0; r < R; r++) {
+    for (let k = 0; k < K; k++) {
+      if (!sticky[r][k]) continue;
+      const o = ocells[r][k];
+      const origin = origins.some(([rr, kk]) => rr === r && kk === k);
+      if (!o.classList.contains("sticky") || o.classList.contains("ow-origin") !== origin) {
+        o.innerHTML = symbolHTML(origin ? "OW" : "W");
+        o.classList.add("sticky");
+        o.classList.toggle("ow-origin", origin);
+        if (animate) {
+          o.style.setProperty("--d", `${(r + k) * 40 * speed()}ms`);
+          o.classList.add("lock-in");
         }
       }
-      if (done) resolve();
-      else requestAnimationFrame(frame);
-    };
-    requestAnimationFrame(frame);
+    }
+  }
+}
+
+/** Spin all reels to `grid`. Reels stop left to right; once two Capture Cores are showing, each
+ *  remaining reel slows down and glows (the bonus tease). */
+async function spinReels(key, grid, stops, sticky) {
+  const pitch = cellPitch();
+  const base = 560 * speed();
+  const stagger = 170 * speed();
+  const tease = 1150 * speed();
+  let prev = 0;
+  let cores = 0;
+  const jobs = [];
+  for (let r = 0; r < R; r++) {
+    const locked = !!sticky && sticky[r].every(Boolean);
+    const teasing = !locked && cores >= 2;
+    const stopAt = teasing ? prev + tease : Math.max(base + r * stagger, prev + stagger);
+    jobs.push(spinReel(r, key, grid[r], stops[r], { stopAt, teasing, teaseFrom: prev, locked }, pitch, sticky));
+    prev = stopAt;
+    for (let k = 0; k < K; k++) if (grid[r][k] === CORE && !(sticky && sticky[r][k])) cores++;
+  }
+  await Promise.all(jobs);
+}
+
+function spinReel(r, key, col, stop, plan, pitch, sticky) {
+  const { el, strip } = reels[r];
+  if (plan.locked || reduceMotion) {
+    setColumn(r, col);
+    return Promise.resolve();
+  }
+  const src = game.reelSets[key][r];
+  const fillerCount = Math.max(6, Math.min(60, Math.round(plan.stopAt / 55)));
+  const finals = col.map(makeCell);
+  const fillers = [];
+  for (let i = 0; i < fillerCount; i++) fillers.push(makeCell(src[(stop + 5 + i) % src.length]));
+  strip.prepend(...finals, ...fillers);
+  const dist = (5 + fillerCount) * pitch;
+  el.classList.add("spinning");
+  if (plan.teasing) setTimeout(() => el.classList.add("tease"), plan.teaseFrom);
+  setTimeout(() => el.classList.remove("spinning"), plan.stopAt * 0.86);
+  const anim = strip.animate(
+    [
+      { transform: `translateY(${-dist}px)`, easing: "cubic-bezier(.32,0,.22,1)" },
+      { transform: `translateY(${pitch * 0.16}px)`, offset: 0.9, easing: "cubic-bezier(.3,0,.3,1)" },
+      { transform: "translateY(0)" },
+    ],
+    { duration: plan.stopAt },
+  );
+  return anim.finished.then(() => {
+    while (strip.children.length > 5) strip.lastElementChild.remove();
+    cells[r] = finals;
+    el.classList.remove("tease");
+    for (let k = 0; k < K; k++) {
+      finals[k].classList.add("land");
+      if (col[k] === CORE && !(sticky && sticky[r][k])) {
+        const [x, y] = fx.at(ocells[r][k]);
+        fx.burst(x, y, { n: 18, colors: ["#ffc531", "#fff1a8", "#ff8a3d"], speed: 3.5, size: 3, life: 35 });
+      }
+    }
   });
 }
 
 async function showOverrides(drops, sticky) {
   for (const [r, k] of drops) {
-    const c = cells[r][k];
-    setSym(c, OVERRIDE);
-    c.classList.add("ow-drop");
+    const o = ocells[r][k];
+    o.innerHTML = symbolHTML("OW");
+    o.classList.add("ow-drop");
     tick(`<b>Override Wild</b> on reel ${r + 1}: its whole row and column turn wild.`);
-    await sleep(520);
+    await sleep(300);
+    const [x, y] = fx.at(o);
+    fx.burst(x, y, { n: 50, speed: 7.5, size: 5, life: 50 });
+    shake(ui.wrap, 9, 420);
+    fx.beam(o, ui.grid, false);
+    fx.beam(o, ui.grid, true);
     for (let rr = 0; rr < R; rr++) {
       for (let kk = 0; kk < K; kk++) {
         if ((rr === r) === (kk === k)) continue; // only the cross, not the origin
         if (sticky && sticky[rr][kk]) continue;
-        const cell = cells[rr][kk];
-        cell.style.setProperty("--d", `${(Math.abs(rr - r) + Math.abs(kk - k)) * 70 * speed()}ms`);
+        const cell = ocells[rr][kk];
+        cell.style.setProperty("--d", `${(Math.abs(rr - r) + Math.abs(kk - k)) * 55 * speed()}ms`);
         cell.classList.add("wildcell");
       }
     }
-    await sleep(560);
+    await sleep(640);
+  }
+}
+
+function coreHit(grid, sticky) {
+  for (let r = 0; r < R; r++) {
+    for (let k = 0; k < K; k++) {
+      if (grid[r][k] !== CORE || (sticky && sticky[r][k])) continue;
+      ocells[r][k].classList.add("core-hit");
+      const [x, y] = fx.at(ocells[r][k]);
+      fx.burst(x, y, { n: 30, colors: ["#ffc531", "#fff1a8", "#ff8a3d", "#fff"], speed: 5.5, size: 4 });
+    }
   }
 }
 
@@ -240,12 +319,26 @@ function render() {
 
 async function showWins(lines, mult, winX, b) {
   ui.grid.classList.add("has-win");
-  for (const l of lines) for (const [r, k] of l.cells) cells[r][k].classList.add("win");
+  const hit = new Set();
+  for (const l of lines) {
+    for (const [r, k] of l.cells) {
+      cells[r][k].classList.add("win");
+      ocells[r][k].classList.add("win");
+      hit.add(r * K + k);
+    }
+  }
+  const per = Math.max(2, Math.min(9, Math.round(150 / hit.size)));
+  for (const id of hit) {
+    const [x, y] = fx.at(ocells[Math.floor(id / K)][id % K]);
+    fx.burst(x, y, { n: per, colors: ["#b6ff3b", "#fff1a8", "#ffc531"], speed: 3.2, size: 3, life: 38, gravity: 0.1 });
+  }
   tick(linesText(lines, mult, b));
   if (winX >= BIG_WIN) {
-    await sleep(800);
+    await sleep(700);
+    shake(ui.wrap, winX >= 100 ? 12 : 8, 500);
+    fx.fountain(winX >= 250 ? 220 : winX >= 100 ? 150 : 90);
     const title = winX >= 250 ? "EPIC WIN" : winX >= 100 ? "MEGA WIN" : "BIG WIN";
-    await countBanner(title, round2(winX * b), 2200);
+    await countBanner(title, round2(winX * b), 2400, winX >= 100 ? "gold" : "");
   } else {
     await sleep(950);
   }
@@ -266,18 +359,21 @@ async function runBonus(tierIndex, cap) {
     ui.hudTotal.textContent = fmt(round2(st.total * b));
   };
   hud();
+  await glitchHit(600);
   await banner(t.name.toUpperCase(), FEATURE_TEXT[t.key], 2300, t.key === "legendary" ? "gold" : "");
   clearFx();
   if (origins.length) {
-    renderSticky(st.sticky, origins);
+    await showOverrides(origins, null);
+    clearFx(true);
+    renderSticky(st.sticky, origins, true);
     tick(`<b>${t.name}</b> starts with a locked Override cross.`);
-    await sleep(1100);
+    await sleep(900);
   }
   while (!st.done) {
     clearFx(true);
     const res = game.bonusSpin(st);
     hud();
-    await animateReels(t.key, res.grid, res.stickyBefore);
+    await spinReels(t.key, res.grid, res.stops, res.stickyBefore);
     if (res.drops.length) {
       if (res.guaranteed) {
         tick("<b>Last spin:</b> guaranteed Override Wild!");
@@ -298,12 +394,16 @@ async function runBonus(tierIndex, cap) {
     hud();
     if (t.stickyMode && res.drops.length) {
       clearFx(true);
-      renderSticky(st.sticky, origins);
+      renderSticky(st.sticky, origins, true);
       tick(t.stickyMode === 1 ? "That column is now <b>locked wild</b> for the rest of the bonus." :
         "That cross is now <b>locked wild</b> for the rest of the bonus.");
       await sleep(700);
     }
-    if (res.retrig) await banner("+4 FREE SPINS", "3 Capture Cores landed", 1500);
+    if (res.retrig) {
+      coreHit(res.grid, res.stickyBefore);
+      await sleep(600);
+      await banner("+4 FREE SPINS", "3 Capture Cores landed", 1500);
+    }
   }
   const total = round2(st.total * b);
   await countBanner(`${t.name} complete`, total, 2400, t.key === "legendary" ? "gold" : "");
@@ -314,6 +414,8 @@ async function runBonus(tierIndex, cap) {
 }
 
 async function maxWinBanner(b) {
+  shake(ui.wrap, 14, 700);
+  fx.fountain(300);
   await banner("MAX WIN", `${fmt(round2(data.maxWin * b))} · 10,000× bet`, 3000, "gold");
 }
 
@@ -334,7 +436,7 @@ async function spin() {
   clearFx();
 
   const res = game.baseSpin();
-  await animateReels("base", res.grid, null);
+  await spinReels("base", res.grid, res.stops, null);
   if (res.drops.length) await showOverrides(res.drops, null);
   let totalX = res.win;
   if (res.win > 0) {
@@ -346,9 +448,9 @@ async function spin() {
     tick(res.cores ? `${res.cores} Capture Core${res.cores > 1 ? "s" : ""}. Land 3 for a bonus.` : "No win.");
   }
   if (res.tier >= 0) {
-    for (let r = 0; r < R; r++) for (let k = 0; k < K; k++) if (res.grid[r][k] === CORE) cells[r][k].classList.add("core-hit");
+    coreHit(res.grid, null);
     tick(`<b>${res.cores} Capture Cores!</b>`);
-    await sleep(1500);
+    await sleep(1400);
     const st = await runBonus(res.tier, data.maxWin - res.win);
     totalX += st.total;
     credit(round2(st.total * b));
@@ -479,5 +581,37 @@ if (repo) {
 
 // First screen: a random base-game window, no animation.
 const first = game.spinReels("base").grid;
-for (let r = 0; r < R; r++) for (let k = 0; k < K; k++) setSym(cells[r][k], first[r][k]);
+for (let r = 0; r < R; r++) setColumn(r, first[r]);
 render();
+
+// ---- Debug hooks (only with ?debug in the URL) -------------------------------------------
+if (new URLSearchParams(location.search).has("debug")) {
+  const baseCum = game.cum.base;
+  window.bb = {
+    game,
+    /** Play a bonus tier for free (0 Street Hunt, 1 Night Raid, 2 Legendary). */
+    async bonus(i) {
+      if (S.busy) return;
+      S.busy = true;
+      render();
+      const st = await runBonus(i, data.maxWin);
+      credit(round2(st.total * bet()));
+      S.busy = false;
+      render();
+    },
+    /** Force an Override Wild on every base spin (true) or restore the real odds (false). */
+    forceOverride(on = true) {
+      game.cum.base = on ? [0, 1, 1] : baseCum;
+    },
+    /** Make the next base spin stop at these reel stops. */
+    forceStops(stops) {
+      const real = game.spinReels.bind(game);
+      game.spinReels = (key) => {
+        game.spinReels = real;
+        const strips = game.reelSets[key];
+        return { stops, grid: strips.map((s, r) => Array.from({ length: K }, (_, k) => s[(stops[r] + k) % s.length])) };
+      };
+    },
+    spin,
+  };
+}

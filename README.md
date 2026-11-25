@@ -5,10 +5,10 @@ A high-volatility 5×5, 3,125-ways slot. Its **cross wild** turns its whole row 
 bought. This repo has the full math model, an exact calculation of the base game, and Monte Carlo
 verification showing the game hits **96% RTP**.
 
-### ▶ [Play the free demo](PLAY_URL)
+### ▶ [Play the free demo](https://infernokik.github.io/bootleg-beasts/)
 
 The browser demo plays the exact same reel strips, weights and rules as the verified model. Its
-[self-test page](PLAY_URLselftest.html) checks the JavaScript engine against Python in your browser:
+[self-test page](https://infernokik.github.io/bootleg-beasts/selftest.html) checks the JavaScript engine against Python in your browser:
 identical wins on 1,500 exported grids, the same bonus rules, and matching RTP by simulation.
 Virtual credits only, no real-money play.
 
@@ -59,6 +59,9 @@ sims/
   export_web.py exports the model + JS test vectors for the browser demo
 web/            playable demo (vanilla JS, no build step), deployed by GitHub Pages
   engine.js     line-for-line port of engine.py
+  app.js        UI: scrolling reels, bonus tease, overlay for wild crosses and locked wilds
+  fx.js         particles, beams, screen shake, glitch transitions
+  background.js animated pixel-art city (canvas)
   selftest.html checks engine.js against the Python model
   assets/symbols/  96x96 pixel-art symbols (made by art/pixelate.py)
 art/
@@ -89,6 +92,7 @@ Requires Python 3.12+.
 | Exact base game + full-cycle check | Done |
 | Simulator, tuning to 96% | Done |
 | Playable browser demo + JS-vs-Python self-test | Done |
+| Pixel-art symbols, logo, animated background, reel and win animations | Done |
 | Charts: RTP convergence, RTP split, win distribution, bonus buy profiles | Next |
 | Player-session simulation | Next |
 | Par sheet | Next |
