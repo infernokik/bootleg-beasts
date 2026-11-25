@@ -59,6 +59,13 @@ a { color: var(--cyan); }
 .logo::after { color: var(--cyan); transform: translate(2px, 0); clip-path: inset(55% 0 0 0); opacity: .85; animation: glitchB 2.7s infinite steps(1); }
 @keyframes glitchA { 0%, 92% { transform: translate(-2px, 0); } 94% { transform: translate(-6px, -1px); } 97% { transform: translate(3px, 1px); } }
 @keyframes glitchB { 0%, 90% { transform: translate(2px, 0); } 93% { transform: translate(7px, 1px); } 96% { transform: translate(-3px, 0); } }
+.logo-img { margin: 0; line-height: 0; }
+.logo-img img { height: clamp(64px, 11vw, 110px); width: auto; animation: logoGlitch 4s infinite steps(1); }
+@keyframes logoGlitch {
+  0%, 93%, 100% { filter: none; transform: none; }
+  94% { filter: drop-shadow(-4px 0 #ff2bd6) drop-shadow(4px 0 #21f0ff); transform: translateX(2px); }
+  96% { filter: drop-shadow(3px 0 #ff2bd6) drop-shadow(-3px 0 #21f0ff); transform: translateX(-2px) skewX(-4deg); }
+}
 .badges { display: flex; gap: 8px; flex-wrap: wrap; }
 .badge {
   font-size: 12px; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--line);
