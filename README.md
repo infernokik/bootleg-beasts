@@ -60,10 +60,10 @@ sims/
 web/            playable demo (vanilla JS, no build step), deployed by GitHub Pages
   engine.js     line-for-line port of engine.py
   selftest.html checks engine.js against the Python model
-  assets/symbols/  64x64 pixel-art symbols (made by art/pixelate.py)
+  assets/symbols/  96x96 pixel-art symbols (made by art/pixelate.py)
 art/
   gemini/       source symbol art generated with Google Gemini
-  pixelate.py   converts it to pixel art with one shared 48-colour palette
+  pixelate.py   converts it to pixel art with one shared 64-colour palette
 tests/          pytest unit tests
 docs/           design & math spec
 reports/        results (charts and par sheet coming next)

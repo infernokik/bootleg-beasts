@@ -7,7 +7,7 @@ whole symbol set. The shared palette is what makes images from different prompts
 Outputs are tiny PNGs (GRID x GRID). The browser scales them up with `image-rendering: pixelated`,
 so they stay crisp at any size.
 
-Run:  .venv\\Scripts\\python.exe art\\pixelate.py [--grid 64] [--colors 48] [--preview sheet.png]
+Run:  .venv\\Scripts\\python.exe art\\pixelate.py [--grid 96] [--colors 64] [--preview sheet.png]
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ SRC = ROOT / "art" / "gemini"
 OUT = ROOT / "web" / "assets" / "symbols"
 
 # Source file stem prefix -> symbol code used by the game
-CODES = ["H1", "H2", "H3", "H4", "L1", "L2", "L3", "L4", "L5", "W", "OW", "S"]
+CODES = ["H1", "H2", "H3", "H4", "L1", "L2", "L3", "L4", "L5", "W", "OW", "S", "X"]
 # Colours every symbol must be able to use: the tile background navy, outline black, white.
 FIXED = [(11, 13, 30), (6, 6, 12), (245, 245, 250)]
 
@@ -69,7 +69,7 @@ def to_palette(small: Image.Image, pal: Image.Image) -> Image.Image:
 
 
 def static_tile(grid: int, pal: Image.Image, seed: int = 7) -> Image.Image:
-    """The non-paying Static symbol: a dead TV screen, generated procedurally."""
+    """Fallback for the non-paying Static symbol when there's no source art: procedural TV noise."""
     rng = np.random.default_rng(seed)
     noise = rng.integers(40, 150, (grid, grid)).astype(np.uint8)
     noise[rng.random(grid) < 0.12] //= 2  # a few dark scanlines
@@ -81,8 +81,8 @@ def static_tile(grid: int, pal: Image.Image, seed: int = 7) -> Image.Image:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--grid", type=int, default=64)
-    ap.add_argument("--colors", type=int, default=48)
+    ap.add_argument("--grid", type=int, default=96)
+    ap.add_argument("--colors", type=int, default=64)
     ap.add_argument("--preview", type=Path, help="also write a contact sheet here")
     args = ap.parse_args()
 
@@ -90,7 +90,8 @@ def main() -> None:
     smalls = {code: shrink(load(p), args.grid) for code, p in sources.items()}
     pal = shared_palette(list(smalls.values()), args.colors)
     out = {code: to_palette(im, pal) for code, im in smalls.items()}
-    out["X"] = static_tile(args.grid, pal)
+    if "X" not in out:
+        out["X"] = static_tile(args.grid, pal)
 
     OUT.mkdir(parents=True, exist_ok=True)
     for code, im in out.items():
@@ -106,7 +107,7 @@ def main() -> None:
 
     if args.preview:
         scale = 4
-        codes = sorted(out, key=lambda c: (CODES + ["X"]).index(c))
+        codes = sorted(out, key=CODES.index)
         sheet = Image.new("RGB", (len(codes) * args.grid * scale, args.grid * scale))
         for i, c in enumerate(codes):
             big = out[c].convert("RGB").resize((args.grid * scale,) * 2, Image.Resampling.NEAREST)
