@@ -222,6 +222,8 @@ body.glitch-hit .app { animation: glitchHit .6s steps(2) both; }
 .buy b { font-variant-numeric: tabular-nums; color: var(--cyan); }
 .buy-raid { border-color: rgba(255, 43, 214, .4); background: rgba(255, 43, 214, .07); }
 .buy-raid b { color: var(--magenta); }
+.buy-lock { border-color: rgba(255, 200, 40, .45); background: rgba(255, 200, 40, .08); }
+.buy-lock b { color: #ffd23f; }
 .buy:hover:not(:disabled) { filter: brightness(1.25); }
 .toggles { display: flex; gap: 16px; color: var(--muted); font-size: 14px; }
 .toggle { display: flex; gap: 6px; align-items: center; cursor: pointer; }
@@ -328,3 +330,8 @@ body[data-level="3"] .grid { border-color: rgba(255, 197, 49, .85); box-shadow: 
 .mute-btn { font-style: normal; font-family: inherit; font-size: 16px; }
 .mute-btn + .icon-btn { margin-left: 8px; }
 .icon-btn.mute-btn { margin-left: auto; }
+.refill { cursor: pointer; font-size: 13px; }
+.refill:hover:not(:disabled) { filter: brightness(1.25); }
+.refill:disabled { opacity: .45; cursor: default; }
+.refill.urgent { animation: refillPulse 1s ease-in-out infinite alternate; }
+@keyframes refillPulse { to { background: rgba(255,197,49,.25); box-shadow: 0 0 14px rgba(255,197,49,.5); } }

@@ -113,7 +113,11 @@ class Buy:
     start_level: int
 
 
-BUYS = (Buy("bonus", "Bonus", 0), Buy("super", "Super Bonus", 1))
+BUYS = (
+    Buy("street_hunt", "Street Hunt", 0),
+    Buy("night_raid", "Night Raid", 1),
+    Buy("lockdown", "Lockdown", 2),
+)
 
 MODEL_PATH = Path(__file__).with_name("model.json")
 

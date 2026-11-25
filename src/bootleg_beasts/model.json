@@ -1,8 +1,9 @@
 {
  "version": "0.3",
  "buy_prices": {
-  "bonus": 100.0,
-  "super": 230.0
+  "street_hunt": 100.0,
+  "night_raid": 230.0,
+  "lockdown": 690.0
  },
  "override_weights": {
   "base": [

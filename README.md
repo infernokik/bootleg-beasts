@@ -18,7 +18,7 @@ engine against Python in your browser. Virtual credits only, no real-money play.
 - **Bonus with four levels**, started by 3, 4 or 5 Capture Cores. Every 3 Reactors give +4 spins and the next level:
   Street Hunt → Night Raid → **Lockdown** (Override columns lock wild) → **Overload** (full crosses, Glitch Wilds lock).
 - **Beast capture:** each beast under an Override adds +1 to +3 to that spin's multiplier, and captures stack.
-- **Bonus buys:** Bonus (100×) and Super Bonus (230×, starts on level 2). Guaranteed minimum win per start level.
+- **Bonus buys:** Street Hunt (100×), Night Raid (230×) and Lockdown (690×), matching 3, 4 and 5 Cores. Guaranteed minimum win per start level.
 - Synthesized chiptune sound effects, scrolling reels, particle effects and an animated pixel city.
 
 ## Headline numbers
@@ -27,8 +27,9 @@ engine against Python in your browser. Virtual credits only, no real-money play.
 |---|---|
 | **RTP, exact base + simulated bonus** | **96.03% ± 0.04%** |
 | RTP, 2×10⁹ full-game spins | 96.03% ± 0.09% (z = −0.07) |
-| Bonus buy (100×) RTP | 96.22% ± 0.15% |
-| Super Bonus buy (230×) RTP | 95.98% ± 0.12% |
+| Street Hunt buy (100×) RTP | 96.22% ± 0.15% |
+| Night Raid buy (230×) RTP | 95.98% ± 0.12% |
+| Lockdown buy (690×) RTP | 96.17% ± 0.07% |
 | Hit frequency | 30.8% |
 | Volatility (SD per spin) | 21.0× bet |
 | Bonus odds (3 / 4 / 5 Cores) | 1 in 342 / 1 in 9,140 / 1 in 610,574 spins |

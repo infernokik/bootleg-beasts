@@ -2,8 +2,9 @@
  "model_version": "0.3",
  "max_win": 5000.0,
  "buy_prices": {
-  "bonus": 100.0,
-  "super": 230.0
+  "street_hunt": 100.0,
+  "night_raid": 230.0,
+  "lockdown": 690.0
  },
  "exact": {
   "rtp_no_override": 0.5898650225727318,
@@ -509,8 +510,8 @@
   }
  },
  "buys": {
-  "bonus": {
-   "name": "Bonus",
+  "street_hunt": {
+   "name": "Street Hunt",
    "price": 100.0,
    "start_level": 0,
    "rtp": 0.9622061124149996,
@@ -523,8 +524,8 @@
     "p_10x_price": 0.0149875
    }
   },
-  "super": {
-   "name": "Super Bonus",
+  "night_raid": {
+   "name": "Night Raid",
    "price": 230.0,
    "start_level": 1,
    "rtp": 0.9597725293108711,
@@ -535,6 +536,20 @@
     "p_under_50pct": 0.800321,
     "p_at_least_price": 0.126778,
     "p_10x_price": 0.0222125
+   }
+  },
+  "lockdown": {
+   "name": "Lockdown",
+   "price": 690.0,
+   "start_level": 2,
+   "rtp": 0.9617277260811606,
+   "rtp_ci95": 0.0007355994422122372,
+   "profile": {
+    "median_x": 120.0,
+    "p_under_10pct": 0.0,
+    "p_under_50pct": 0.6978275,
+    "p_at_least_price": 0.2208065,
+    "p_10x_price": 0.0
    }
   }
  },
@@ -629,7 +644,7 @@
     0.073822426424122
    ]
   },
-  "seconds": 63.93546919999062
+  "seconds": 69.17746730000363
  },
  "game_vs_parts_z": -0.0738295851082192,
  "sessions": {

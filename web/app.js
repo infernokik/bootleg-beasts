@@ -1,10 +1,10 @@
 // Bootleg Beasts: browser UI. Every outcome comes from engine.js, which uses the same reel strips,
 // weights and rules as the verified Python model (game-data.json).
-import { Game, CORE, REACTOR } from "./engine.js?v=6";
-import { symbolHTML } from "./symbols.js?v=6";
-import { Fx, shake, glitchHit } from "./fx.js?v=6";
-import { startBackground } from "./background.js?v=6";
-import { sfx, isMuted, setMuted } from "./sfx.js?v=6";
+import { Game, CORE, REACTOR } from "./engine.js?v=7";
+import { symbolHTML } from "./symbols.js?v=7";
+import { Fx, shake, glitchHit } from "./fx.js?v=7";
+import { startBackground } from "./background.js?v=7";
+import { sfx, isMuted, setMuted } from "./sfx.js?v=7";
 
 try {
   startBackground(document.getElementById("bg"));
@@ -20,6 +20,7 @@ const R = data.reels;
 const K = data.rows;
 const BETS = [0.2, 0.5, 1, 2, 5, 10, 20];
 const START_BALANCE = 1000;
+const REFILL = 10000;
 const BIG_WIN = 25; // x bet
 const LEVEL_TEXT = [
   "Override Wilds turn their column wild · captured beasts add +1–2×",
@@ -34,8 +35,8 @@ const ui = {
   grid: $("grid"), wrap: document.querySelector(".grid-wrap"), ovl: $("ovl"), banner: $("banner"),
   bannerTitle: $("bannerTitle"), bannerSub: $("bannerSub"), winTag: $("winTag"), ticker: $("ticker"),
   balance: $("balance"), win: $("win"), bet: $("bet"), spin: $("spinBtn"), betUp: $("betUp"),
-  betDown: $("betDown"), buys: [$("buy0"), $("buy1")], buyCosts: [$("buyCost0"), $("buyCost1")],
-  buyNames: [$("buyName0"), $("buyName1")], turbo: $("turbo"), auto: $("auto"), refill: $("refill"),
+  betDown: $("betDown"), buys: [$("buy0"), $("buy1"), $("buy2")], buyCosts: [$("buyCost0"), $("buyCost1"), $("buyCost2")],
+  buyNames: [$("buyName0"), $("buyName1"), $("buyName2")], turbo: $("turbo"), auto: $("auto"), refill: $("refill"),
   hud: $("hud"), hudLevel: $("hudLevel"), hudLvlNum: $("hudLvlNum"), pips: [...document.querySelectorAll(".pip")],
   hudSpins: $("hudSpins"), hudMult: $("hudMult"), hudTotal: $("hudTotal"), info: $("info"),
   infoBody: $("infoBody"), infoBtn: $("infoBtn"), mute: $("muteBtn"), sSpins: $("sSpins"),
@@ -382,7 +383,8 @@ function render() {
   ui.sWon.textContent = fmt(S.won);
   ui.sRtp.textContent = S.wagered ? `${((100 * S.won) / S.wagered).toFixed(1)}%` : "–";
   const canSpin = S.balance >= bet() - 1e-9;
-  ui.refill.hidden = canSpin || S.busy;
+  ui.refill.disabled = S.busy;
+  ui.refill.classList.toggle("urgent", !canSpin && !S.busy);
   ui.spin.disabled = S.busy || !canSpin;
   ui.betUp.disabled = S.busy || S.betIdx >= BETS.length - 1;
   ui.betDown.disabled = S.busy || S.betIdx <= 0;
@@ -690,7 +692,8 @@ ui.betDown.addEventListener("click", () => {
   render();
 });
 ui.refill.addEventListener("click", () => {
-  S.balance = START_BALANCE;
+  S.balance = round2(S.balance + REFILL);
+  sfx.coin();
   render();
 });
 ui.turbo.addEventListener("change", () => document.documentElement.style.setProperty("--t", speed()));

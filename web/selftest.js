@@ -1,8 +1,8 @@
 // Checks the JavaScript engine against the Python model:
 //   1. ways evaluation on 1,500 grids exported from Python (must match exactly)
 //   2. bonus rules on hand-built reels (same cases as tests/test_engine.py)
-//   3. Monte Carlo: base game, Bonus and Super Bonus vs the verified Python numbers
-import { Game, setRandInt } from "./engine.js?v=6";
+//   3. Monte Carlo: base game, Street Hunt, Night Raid and Lockdown starts vs the verified Python numbers
+import { Game, setRandInt } from "./engine.js?v=7";
 
 const out = document.getElementById("out");
 const results = { pass: 0, fail: 0 };
@@ -80,8 +80,9 @@ function mc(label, n, sample, expected) {
 }
 await new Promise((r) => setTimeout(r, 0));
 mc("Base game ways RTP", 4_000_000, () => game.baseSpin().win, s.baseRtp);
-mc("Bonus (level 1 start) mean payout", 150_000, () => game.playBonus(0).total, s.bonusMean[0]);
-mc("Super Bonus (level 2 start) mean payout", 100_000, () => game.playBonus(1).total, s.bonusMean[1]);
+mc("Street Hunt (level 1 start) mean payout", 150_000, () => game.playBonus(0).total, s.bonusMean[0]);
+mc("Night Raid (level 2 start) mean payout", 100_000, () => game.playBonus(1).total, s.bonusMean[1]);
+mc("Lockdown (level 3 start) mean payout", 60_000, () => game.playBonus(2).total, s.bonusMean[2]);
 setRandInt(null);
 
 log(`\n${results.pass} passed, ${results.fail} failed`);

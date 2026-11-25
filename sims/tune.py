@@ -89,7 +89,7 @@ def main() -> None:
     t0 = time.perf_counter()
     reels = {key: build_reels(*spec) for key, spec in REEL_SETS.items()}
     model = Model("0.3", reels, {"base": weights(0.0)} | level_weights(0.0), REVEAL_WEIGHTS,
-                  {"bonus": BONUS_PRICE})
+                  {BUYS[0].key: BONUS_PRICE})
     for key, rs in reels.items():
         print(f"Reel lengths {key:6s} {rs.lens.tolist()}")
 
@@ -105,10 +105,10 @@ def main() -> None:
         cis.append(r["ci95"])
         print(f"  start at {lv.name:12s} mean payout {r['mean_win']:8.2f}x +/- {r['ci95']:.2f}  "
               f"sd {r['std']:.0f}  final level shares {np.round(r['final_level_share'], 3).tolist()}")
-    super_level = BUYS[1].start_level
-    model.buy_prices["super"] = float(round(evs[super_level] / TARGET_BUY_RTP))
-    print(f"Super Bonus price {model.buy_prices['super']:.0f}x "
-          f"(RTP {evs[super_level] / model.buy_prices['super']:.3%})")
+    for b in BUYS[1:]:
+        model.buy_prices[b.key] = float(round(evs[b.start_level] / TARGET_BUY_RTP))
+        print(f"{b.name} buy price {model.buy_prices[b.key]:.0f}x "
+              f"(RTP {evs[b.start_level] / model.buy_prices[b.key]:.3%})")
 
     ex = exact.base_game_exact(model)
     p_trig = np.array(ex["p_trigger"])
