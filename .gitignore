@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Raw simulation output (large; regenerate with the sim scripts)
+sims/output/
+*.npy
+*.npz
+*.parquet
+
+# Local tooling
+.claude/
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
