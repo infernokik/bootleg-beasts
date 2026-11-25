@@ -335,3 +335,113 @@ body[data-level="3"] .grid { border-color: rgba(255, 197, 49, .85); box-shadow: 
 .refill:disabled { opacity: .45; cursor: default; }
 .refill.urgent { animation: refillPulse 1s ease-in-out infinite alternate; }
 @keyframes refillPulse { to { background: rgba(255,197,49,.25); box-shadow: 0 0 14px rgba(255,197,49,.5); } }
+
+/* ---- Bonus mood: each level re-lights the city ----------------------------------- */
+.mood { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0; transition: opacity .8s, background-color .8s; overflow: hidden; }
+.mood::before, .mood::after { content: ""; position: absolute; inset: 0; }
+body.in-bonus .mood { opacity: 1; }
+/* Street Hunt: cold rain */
+body.in-bonus[data-level="0"] .mood { background-color: rgba(10, 40, 80, .28); }
+body.in-bonus[data-level="0"] .mood::before {
+  background: repeating-linear-gradient(100deg, transparent 0 22px, rgba(140, 220, 255, .13) 22px 23px, transparent 23px 47px);
+  background-size: 200px 200px; animation: rain .45s linear infinite;
+}
+@keyframes rain { to { background-position: -40px 200px; } }
+/* Night Raid: sweeping searchlights */
+body.in-bonus[data-level="1"] .mood { background-color: rgba(60, 10, 90, .3); }
+body.in-bonus[data-level="1"] .mood::before, body.in-bonus[data-level="1"] .mood::after {
+  inset: -50%; background: conic-gradient(from 0deg at 50% 100%, transparent 0 40deg, rgba(200, 140, 255, .16) 46deg, transparent 54deg 360deg);
+  animation: sweep 6s ease-in-out infinite alternate;
+}
+body.in-bonus[data-level="1"] .mood::after { animation-delay: -3s; animation-duration: 7.5s; }
+@keyframes sweep { from { transform: rotate(-40deg); } to { transform: rotate(40deg); } }
+/* Lockdown: police sirens */
+body.in-bonus[data-level="2"] .mood { background-color: rgba(70, 0, 20, .3); }
+body.in-bonus[data-level="2"] .mood::before { background: radial-gradient(60% 70% at 0% 30%, rgba(255, 30, 60, .45), transparent 70%); animation: siren .9s steps(1) infinite; }
+body.in-bonus[data-level="2"] .mood::after { background: radial-gradient(60% 70% at 100% 30%, rgba(40, 90, 255, .45), transparent 70%); animation: siren .9s steps(1) infinite reverse; }
+@keyframes siren { 0% { opacity: 1; } 50% { opacity: .1; } }
+/* Overload: white-hot glitch */
+body.in-bonus[data-level="3"] .mood { background-color: rgba(90, 60, 0, .3); }
+body.in-bonus[data-level="3"] .mood::before { background: radial-gradient(70% 60% at 50% 55%, rgba(255, 220, 120, .38), transparent 70%); animation: overload 1.1s ease-in-out infinite alternate; }
+body.in-bonus[data-level="3"] .mood::after { background: repeating-linear-gradient(to bottom, rgba(255, 240, 200, .07) 0 2px, transparent 2px 7px); animation: jitter .18s steps(2) infinite; }
+@keyframes overload { from { opacity: .45; } to { opacity: 1; filter: hue-rotate(-20deg); } }
+@keyframes jitter { 50% { transform: translateY(3px); } }
+
+/* ---- Reactor flight and charged meter ------------------------------------------------ */
+.fly { position: fixed; z-index: 40; pointer-events: none; filter: drop-shadow(0 0 12px #ffc531) drop-shadow(0 0 26px rgba(255,140,30,.8)); }
+.fly img, .fly svg { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+.fly-trail { position: fixed; z-index: 39; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, #fff6c8, #ffc531 45%, transparent 70%); animation: trail .5s ease-out forwards; }
+@keyframes trail { to { transform: scale(.2); opacity: 0; } }
+.hud-name.charged { border-color: rgba(255,197,49,.8); box-shadow: 0 0 18px rgba(255,197,49,.45); animation: charged .12s linear infinite; }
+@keyframes charged { 25% { transform: translate(1px, -1px); } 75% { transform: translate(-1px, 1px); } }
+.pip.bump { box-shadow: 0 0 16px 4px #ffc531; }
+
+/* ---- Full-screen bonus moments ------------------------------------------------------- */
+.screen { position: fixed; inset: 0; z-index: 45; display: grid; place-items: center; padding: 16px; cursor: pointer;
+  background: radial-gradient(ellipse at center, rgba(30, 10, 60, .82), rgba(5, 3, 12, .94)); backdrop-filter: blur(6px);
+  animation: scrIn .35s ease-out; }
+.screen[hidden] { display: none; }
+.screen.out { animation: scrOut .22s ease-in forwards; }
+@keyframes scrIn { from { opacity: 0; transform: scale(1.08); } }
+@keyframes scrOut { to { opacity: 0; transform: scale(.96); } }
+.scr-card { position: relative; width: min(640px, 100%); display: grid; gap: 14px; justify-items: center; text-align: center; }
+.scr-kicker { font-size: 13px; font-weight: 800; letter-spacing: .3em; text-transform: uppercase; color: var(--gold); }
+.scr-title { font: 900 clamp(36px, 8vw, 78px)/1 "Arial Black", Impact, sans-serif; letter-spacing: .04em; color: #fff;
+  text-shadow: -4px 0 var(--magenta), 4px 0 var(--cyan), 0 0 40px rgba(33, 240, 255, .6); animation: titleGlitch 2.4s steps(1) infinite; }
+@keyframes titleGlitch { 0%, 92% { transform: none; } 93% { transform: translateX(-4px) skewX(6deg); } 96% { transform: translateX(3px); } }
+.scr-title.pop { animation: tierPop .5s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes tierPop { from { transform: scale(1.6); filter: brightness(2); } }
+.scr-sub { font-size: clamp(16px, 2.6vw, 21px); font-weight: 600; color: var(--text); }
+.scr-sub b { color: var(--gold); font-size: 1.25em; }
+.scr-amount { font: 900 clamp(40px, 9vw, 86px)/1 "Arial Black", Impact, sans-serif; color: var(--gold); font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 30px rgba(255, 197, 49, .7), 0 4px 0 #8a4b00; }
+.scr-hint { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 15px; }
+.scr-hint b { color: var(--text); }
+.scr-icon { width: 44px; height: 44px; flex: none; }
+.scr-icon img, .scr-icon svg { width: 100%; height: 100%; image-rendering: pixelated; }
+.scr-cta { margin-top: 4px; font-size: 13px; letter-spacing: .2em; text-transform: uppercase; color: var(--cyan); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: .25; } }
+.screen.outro:not(.counted) .scr-cta { visibility: hidden; }
+
+.ladder { list-style: none; margin: 6px 0 0; padding: 0; width: 100%; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.rung { position: relative; display: grid; gap: 2px; padding: 10px 8px; border-radius: 12px; border: 1px solid var(--line); background: rgba(17, 13, 31, .85); text-align: center; }
+.rung::after { content: "\203A"; position: absolute; right: -9px; top: 50%; transform: translateY(-50%); color: var(--muted); font-weight: 900; }
+.rung:last-child::after { content: none; }
+.rung-num { font: 900 22px/1 "Arial Black", Impact, sans-serif; color: var(--muted); }
+.rung-name { font-weight: 800; font-size: 14px; }
+.rung-text { font-size: 11.5px; color: var(--muted); line-height: 1.3; }
+.rung.locked { opacity: .5; filter: grayscale(.6); }
+.rung.done { opacity: .75; border-color: rgba(182, 255, 59, .4); }
+.rung.done .rung-num { color: var(--lime); }
+.rung.current { border-color: var(--gold); background: rgba(255, 197, 49, .12); box-shadow: 0 0 24px rgba(255, 197, 49, .45); transform: scale(1.06); }
+.rung.current .rung-num, .rung.current .rung-name { color: var(--gold); }
+.rung.current .rung-text { color: var(--text); }
+.rung.unlocking { animation: unlock .9s cubic-bezier(.2, 1.4, .4, 1); }
+@keyframes unlock { 0% { transform: scale(.7); filter: brightness(3); } 60% { transform: scale(1.15); } 100% { transform: scale(1.06); } }
+@media (max-width: 560px) { .ladder { grid-template-columns: repeat(2, 1fr); } .rung::after { content: none; } }
+
+/* level colour on the screens */
+.screen.lvl-1 .scr-title { text-shadow: -4px 0 #6b2bff, 4px 0 #ff5ce1, 0 0 40px rgba(192, 107, 255, .7); }
+.screen.lvl-2 .scr-title { text-shadow: -4px 0 #ff1e3c, 4px 0 #2a5cff, 0 0 40px rgba(255, 60, 60, .6); }
+.screen.lvl-3 .scr-title, .screen[data-tier] .scr-title { text-shadow: -4px 0 #ff7a1a, 4px 0 var(--gold), 0 0 44px rgba(255, 197, 49, .8); }
+.screen[data-tier="mega"] .scr-title, .screen[data-tier="epic"] .scr-title, .screen[data-tier="legend"] .scr-title { font-size: clamp(42px, 9.5vw, 92px); }
+.screen[data-tier="legend"] { background: radial-gradient(ellipse at center, rgba(90, 55, 0, .85), rgba(10, 5, 0, .95)); }
+
+.coins { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+.coins i { position: absolute; top: -30px; width: 16px; height: 16px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff6c8, #ffc531 45%, #b86e00); box-shadow: 0 0 8px rgba(255, 197, 49, .7);
+  animation: coinFall 2s linear forwards; }
+@keyframes coinFall { to { transform: translateY(110vh) rotateY(720deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .mood::before, .mood::after, .scr-title, .coins i, .hud-name.charged { animation: none !important; }
+}
+
+/* ---- Suspense: 3+ Cores showing and the next reel could make it bigger ---------------- */
+.reel.tease.hot { box-shadow: inset 0 0 0 3px #fff1a8, inset 0 0 40px rgba(255, 197, 49, .85), 0 0 30px rgba(255, 197, 49, .7);
+  animation: teaseHot .12s linear infinite alternate; }
+@keyframes teaseHot { from { transform: translateX(-1.5px); } to { transform: translateX(1.5px); } }
+.grid-wrap.suspense::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 30;
+  background: radial-gradient(ellipse at center, transparent 35%, rgba(0, 0, 0, .65) 100%); animation: vignette .6s ease-in-out infinite alternate; }
+@keyframes vignette { to { background: radial-gradient(ellipse at center, transparent 25%, rgba(40, 20, 0, .75) 100%); } }
+.scr-card .scr-cta { margin-top: 10px; font-size: 14px; }

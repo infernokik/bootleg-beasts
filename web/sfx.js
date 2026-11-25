@@ -22,9 +22,9 @@ function audio() {
   return ctx;
 }
 
-function tone({ freq = 440, to = null, type = "square", dur = 0.12, vol = 0.25, delay = 0 }) {
+function tone({ freq = 440, to = null, type = "square", dur = 0.12, vol = 0.25, delay = 0, at = null, out = null }) {
   const a = audio();
-  const t = a.currentTime + delay;
+  const t = at ?? a.currentTime + delay;
   const o = a.createOscillator();
   const g = a.createGain();
   o.type = type;
@@ -33,14 +33,14 @@ function tone({ freq = 440, to = null, type = "square", dur = 0.12, vol = 0.25, 
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(vol, t + 0.006);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g).connect(master);
+  o.connect(g).connect(out || master);
   o.start(t);
   o.stop(t + dur + 0.02);
 }
 
-function noise({ dur = 0.15, vol = 0.2, freq = 2000, q = 1, type = "bandpass", delay = 0, sweep = null }) {
+function noise({ dur = 0.15, vol = 0.2, freq = 2000, q = 1, type = "bandpass", delay = 0, sweep = null, at = null, out = null }) {
   const a = audio();
-  const t = a.currentTime + delay;
+  const t = at ?? a.currentTime + delay;
   const buf = a.createBuffer(1, Math.ceil(a.sampleRate * dur), a.sampleRate);
   const ch = buf.getChannelData(0);
   for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
@@ -54,7 +54,7 @@ function noise({ dur = 0.15, vol = 0.2, freq = 2000, q = 1, type = "bandpass", d
   const g = a.createGain();
   g.gain.setValueAtTime(vol, t);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  src.connect(f).connect(g).connect(master);
+  src.connect(f).connect(g).connect(out || master);
   src.start(t);
 }
 
@@ -128,4 +128,81 @@ export function setMuted(m) {
     /* private mode */
   }
   if (!m) audio();
+  if (m) music.pause();
+  else music.resume();
 }
+
+// ---- Bonus music -------------------------------------------------------------------
+// A 4-bar chiptune loop in A minor, scheduled slightly ahead of time. Each level is faster and adds
+// a layer: kick + bass, then hats, then snare + arpeggio, then a lead line.
+const TEMPO = [116, 126, 138, 152];
+const ROOTS = [110, 87.31, 130.81, 98]; // A2 F2 C3 G2
+const LEAD = [4, 3, 2, 3, 4, 6, 4, 3]; // scale-ish multipliers of the root, two notes per bar
+const M = { on: false, level: 0, step: 0, next: 0, timer: null, gain: null };
+
+function busGain() {
+  const a = audio();
+  if (!M.gain) {
+    M.gain = a.createGain();
+    M.gain.connect(master);
+  }
+  return M.gain;
+}
+
+function playStep(s, t, out) {
+  const bar = s >> 4, i = s & 15, root = ROOTS[bar], L = M.level;
+  if (i % 4 === 0) tone({ freq: 130, to: 42, type: "sine", dur: 0.14, vol: 0.55, at: t, out });
+  if (i % 2 === 0) tone({ freq: i % 4 === 2 ? root * 2 : root, type: "triangle", dur: 0.11, vol: 0.2, at: t, out });
+  if (L >= 1 && i % 2 === 1) noise({ dur: 0.03, vol: 0.06, freq: 8000, type: "highpass", at: t, out });
+  if (L >= 2) {
+    if (i === 4 || i === 12) noise({ dur: 0.12, vol: 0.14, freq: 1800, q: 0.8, at: t, out });
+    const chord = [2, 2.378, 3, 4][i % 4];
+    tone({ freq: root * chord, type: "square", dur: 0.06, vol: 0.035, at: t, out });
+  }
+  if (L >= 3 && (i === 0 || i === 8)) {
+    tone({ freq: root * LEAD[bar * 2 + (i >> 3)], type: "sawtooth", dur: 0.34, vol: 0.05, at: t, out });
+  }
+}
+
+function pump() {
+  const a = audio();
+  const out = busGain();
+  while (M.next < a.currentTime + 0.15) {
+    playStep(M.step, M.next, out);
+    M.next += 60 / TEMPO[M.level] / 4;
+    M.step = (M.step + 1) % 64;
+  }
+}
+
+export const music = {
+  start(level = 0) {
+    M.on = true;
+    M.level = level;
+    M.step = 0;
+    this.resume();
+  },
+  setLevel(level) {
+    M.level = Math.min(level, TEMPO.length - 1);
+  },
+  resume() {
+    if (!M.on || muted || M.timer) return;
+    try {
+      const a = audio();
+      busGain().gain.setValueAtTime(0.55, a.currentTime);
+      M.next = a.currentTime + 0.05;
+      M.timer = setInterval(pump, 30);
+      pump();
+    } catch {
+      /* audio unavailable */
+    }
+  },
+  pause() {
+    clearInterval(M.timer);
+    M.timer = null;
+    if (M.gain && ctx) M.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
+  },
+  stop() {
+    M.on = false;
+    this.pause();
+  },
+};

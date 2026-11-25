@@ -2,7 +2,7 @@
 //   1. ways evaluation on 1,500 grids exported from Python (must match exactly)
 //   2. bonus rules on hand-built reels (same cases as tests/test_engine.py)
 //   3. Monte Carlo: base game, Street Hunt, Night Raid and Lockdown starts vs the verified Python numbers
-import { Game, setRandInt } from "./engine.js?v=8";
+import { Game, setRandInt } from "./engine.js?v=11";
 
 const out = document.getElementById("out");
 const results = { pass: 0, fail: 0 };

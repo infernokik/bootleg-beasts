@@ -16,24 +16,27 @@ engine against Python in your browser. Virtual credits only, no real-money play.
 - **Static TVs** are mystery symbols: every Static on screen reveals the same random symbol.
 - **Override Wild** drops a wild cross in the base game (about 1 in 1,500 spins).
 - **Bonus with four levels**, started by 3, 4 or 5 Capture Cores. Every 3 Reactors give +4 spins and the next level:
-  Street Hunt → Night Raid → **Lockdown** (Override columns lock wild) → **Overload** (full crosses, Glitch Wilds lock).
+  Street Hunt → Night Raid → **Lockdown** (Override columns lock wild) → **Overload** (full crosses, columns and Glitch Wilds lock).
 - **Beast capture:** each beast under an Override adds +1 to +3 to that spin's multiplier, and captures stack.
-- **Bonus buys:** Street Hunt (100×), Night Raid (230×) and Lockdown (690×), matching 3, 4 and 5 Cores. Guaranteed minimum win per start level.
-- Synthesized chiptune sound effects, scrolling reels, particle effects and an animated pixel city.
+- **Bonus buys:** Street Hunt (100×), Night Raid (237×) and Lockdown (723×), matching 3, 4 and 5 Cores. Guaranteed minimum win per start level.
+- Full-screen bonus intro with the level ladder, level-up screens, and a count-up win screen (BIG → MEGA → EPIC → LEGENDARY).
+- Each level re-lights the city (rain, searchlights, sirens, overload glow), with a chiptune loop that speeds up as you level.
+- Reactors fly into the level meter; bonus buys spin in their Capture Cores with suspense on the last reels.
+- Synthesized sound effects, scrolling reels, particle effects and an animated pixel city.
 
 ## Headline numbers
 
 | | Result |
 |---|---|
-| **RTP, exact base + simulated bonus** | **96.03% ± 0.04%** |
-| RTP, 2×10⁹ full-game spins | 96.03% ± 0.09% (z = −0.07) |
-| Street Hunt buy (100×) RTP | 96.22% ± 0.15% |
-| Night Raid buy (230×) RTP | 95.98% ± 0.12% |
-| Lockdown buy (690×) RTP | 96.17% ± 0.07% |
+| **RTP, exact base + simulated bonus** | **96.00% ± 0.05%** |
+| RTP, 2×10⁹ full-game spins | 95.96% ± 0.10% (z = −0.74) |
+| Street Hunt buy (100×) RTP | 96.49% ± 0.16% |
+| Night Raid buy (237×) RTP | 95.96% ± 0.13% |
+| Lockdown buy (723×) RTP | 96.13% ± 0.08% |
 | Hit frequency | 30.8% |
-| Volatility (SD per spin) | 21.0× bet |
+| Volatility (SD per spin) | 22.3× bet |
 | Bonus odds (3 / 4 / 5 Cores) | 1 in 342 / 1 in 9,140 / 1 in 610,574 spins |
-| Max win 5,000× | 1 in 149,948 spins |
+| Max win 5,000× | 1 in 107,469 spins |
 
 Full numbers: **[par sheet](docs/par_sheet.md)**. Design, rules and the iteration log:
 **[docs/design_spec.md](docs/design_spec.md)**.
@@ -72,7 +75,8 @@ sims/
 web/            playable demo (vanilla JS, no build step), deployed by GitHub Pages
   engine.js     line-for-line port of engine.py
   app.js        UI: reels, reveals, Override beams, captures, level meter, win presentation
-  sfx.js        synthesized WebAudio sound effects
+  sfx.js        synthesized WebAudio sound effects and the bonus music loop
+  screens.js    full-screen bonus intro, level-up and win screens
   fx.js         particles, beams, screen shake, glitch transitions
   background.js animated pixel-art city (canvas)
   selftest.html checks engine.js against the Python model

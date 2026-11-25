@@ -86,7 +86,7 @@ LEVELS = (
     Level("street_hunt", "Street Hunt", 1, SHAPE_COLUMN, False, False, 1.0),
     Level("night_raid", "Night Raid", 1, SHAPE_COLUMN, False, False, 1.0),
     Level("lockdown", "Lockdown", 1, SHAPE_COLUMN, False, True, 1.0),
-    Level("overload", "Overload", 1, SHAPE_CROSS, True, False, 1.0),
+    Level("overload", "Overload", 1, SHAPE_CROSS, True, True, 1.0),
 )
 
 # Beast capture (bonus only): each beast (H1-H4) under a freshly dropped Override Wild's column or

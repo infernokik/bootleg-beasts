@@ -23,11 +23,11 @@ is best"). Keep all art original (no Pokémon or other IP; no adult content in p
 ## State (v0.3 redesign: done and pushed)
 
 - Base: 5x5, 3,125 ways. Static (X) is a mystery symbol (weights in model.json `reveal_weights`).
-  Override Wild cross ~1 in 1,488 base spins. 3/4/5 Capture Cores start the bonus at level 1/2/3. Max win 5,000x.
+  Override Wild cross ~1 in 1,534 base spins. 3/4/5 Capture Cores start the bonus at level 1/2/3. Max win 5,000x.
 - Bonus: 4 levels (config.py `LEVELS`). 3 Reactors = +4 spins and next level. Beast captures stack
   onto the spin multiplier (config `CAPTURE`). Minimum win per start level (`MIN_BONUS_WIN`).
-- Buys (named after their start level): Street Hunt 100x, Night Raid 230x, Lockdown 690x. RTP 96.03% (verified, see docs/par_sheet.md).
-- Volatility is high (SD ~21x/spin) though the user asked for medium; user was told.
+- Buys (named after their start level): Street Hunt 100x, Night Raid 237x, Lockdown 723x. RTP 96.00% (verified, see docs/par_sheet.md).
+- Volatility is high (SD ~22x/spin) though the user asked for medium; user was told.
 - Pipeline after any math change: `sims	une.py` -> `simserify.py --spins 2e9` -> `sims\export_web.py`
   -> `sims\charts.py` -> pytest -> open web/selftest.html -> bump `?v=` tags in web/index.html -> commit, push.
 

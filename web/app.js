@@ -1,10 +1,11 @@
 // Bootleg Beasts: browser UI. Every outcome comes from engine.js, which uses the same reel strips,
 // weights and rules as the verified Python model (game-data.json).
-import { Game, CORE, REACTOR } from "./engine.js?v=8";
-import { symbolHTML } from "./symbols.js?v=8";
-import { Fx, shake, glitchHit } from "./fx.js?v=8";
-import { startBackground } from "./background.js?v=8";
-import { sfx, isMuted, setMuted } from "./sfx.js?v=8";
+import { Game, CORE, REACTOR } from "./engine.js?v=11";
+import { symbolHTML } from "./symbols.js?v=11";
+import { Fx, shake, glitchHit } from "./fx.js?v=11";
+import { startBackground } from "./background.js?v=11";
+import { sfx, music, isMuted, setMuted } from "./sfx.js?v=11";
+import { intro, levelUp, outro } from "./screens.js?v=11";
 
 try {
   startBackground(document.getElementById("bg"));
@@ -26,7 +27,7 @@ const LEVEL_TEXT = [
   "Override Wilds turn their column wild · captured beasts add +1–2×",
   "Captures hit harder · more +2× beasts",
   "Override columns LOCK wild for the rest of the bonus · captures up to +3×",
-  "Full Override CROSSES · Glitch Wilds lock · captures up to +3×",
+  "Full Override CROSSES · columns and Glitch Wilds LOCK · captures up to +3×",
 ];
 
 // ---- State & helpers -----------------------------------------------------------
@@ -37,7 +38,7 @@ const ui = {
   balance: $("balance"), win: $("win"), bet: $("bet"), spin: $("spinBtn"), betUp: $("betUp"),
   betDown: $("betDown"), buys: [$("buy0"), $("buy1"), $("buy2")], buyCosts: [$("buyCost0"), $("buyCost1"), $("buyCost2")],
   buyNames: [$("buyName0"), $("buyName1"), $("buyName2")], turbo: $("turbo"), auto: $("auto"), refill: $("refill"),
-  hud: $("hud"), hudLevel: $("hudLevel"), hudLvlNum: $("hudLvlNum"), pips: [...document.querySelectorAll(".pip")],
+  hud: $("hud"), hudName: document.querySelector(".hud-name"), hudLevel: $("hudLevel"), hudLvlNum: $("hudLvlNum"), pips: [...document.querySelectorAll(".pip")],
   hudSpins: $("hudSpins"), hudMult: $("hudMult"), hudTotal: $("hudTotal"), info: $("info"),
   infoBody: $("infoBody"), infoBtn: $("infoBtn"), mute: $("muteBtn"), sSpins: $("sSpins"),
   sBet: $("sBet"), sWon: $("sWon"), sRtp: $("sRtp"), repoLink: $("repoLink"),
@@ -176,8 +177,9 @@ async function spinReels(key, grid, stops, sticky) {
   for (let r = 0; r < R; r++) {
     const locked = !!sticky && sticky[r].every(Boolean);
     const teasing = !sticky && !locked && cores >= 2;
-    const stopAt = teasing ? prev + tease : Math.max(base + r * stagger, prev + stagger);
-    jobs.push(spinReel(r, key, grid[r], stops[r], { stopAt, teasing, teaseFrom: prev, locked }, pitch, sticky));
+    const hot = teasing && cores >= 3; // already a bonus: chasing a higher start level
+    const stopAt = teasing ? prev + tease * (hot ? 1.45 : 1) : Math.max(base + r * stagger, prev + stagger);
+    jobs.push(spinReel(r, key, grid[r], stops[r], { stopAt, teasing, hot, teaseFrom: prev, locked }, pitch, sticky));
     prev = stopAt;
     for (let k = 0; k < K; k++) if (grid[r][k] === CORE) cores++;
   }
@@ -201,7 +203,10 @@ function spinReel(r, key, col, stop, plan, pitch, sticky) {
   if (plan.teasing) {
     setTimeout(() => {
       el.classList.add("tease");
+      el.classList.toggle("hot", !!plan.hot);
+      ui.wrap.classList.toggle("suspense", !!plan.hot);
       sfx.tease();
+      if (plan.hot) sfx.tease();
     }, plan.teaseFrom);
   }
   setTimeout(() => el.classList.remove("spinning"), plan.stopAt * 0.86);
@@ -216,7 +221,8 @@ function spinReel(r, key, col, stop, plan, pitch, sticky) {
   return anim.finished.then(() => {
     while (strip.children.length > 5) strip.lastElementChild.remove();
     cells[r] = finals;
-    el.classList.remove("tease");
+    el.classList.remove("tease", "hot");
+    ui.wrap.classList.remove("suspense");
     sfx.reelStop(r);
     for (let k = 0; k < K; k++) {
       finals[k].classList.add("land");
@@ -447,6 +453,41 @@ async function showWins(lines, mult, winX, b) {
 }
 
 // ---- Bonus HUD -----------------------------------------------------------------------
+/** A Reactor flies from its cell up into a meter pip, leaving a trail. */
+function flyReactor(r, k, pip) {
+  const from = ocells[r][k].getBoundingClientRect();
+  const to = pip.getBoundingClientRect();
+  const ghost = document.createElement("div");
+  ghost.className = "fly";
+  ghost.innerHTML = symbolHTML("R");
+  Object.assign(ghost.style, { left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px` });
+  document.body.appendChild(ghost);
+  const dx = to.left + to.width / 2 - (from.left + from.width / 2);
+  const dy = to.top + to.height / 2 - (from.top + from.height / 2);
+  const anim = ghost.animate([
+    { transform: "translate(0, 0) scale(1) rotate(0deg)" },
+    { transform: `translate(${dx * 0.3}px, ${dy * 0.3 - 70}px) scale(.85) rotate(80deg)`, offset: 0.35 },
+    { transform: `translate(${dx}px, ${dy}px) scale(.12) rotate(300deg)` },
+  ], { duration: (reduceMotion ? 120 : 620) * speed(), easing: "cubic-bezier(.45,0,.8,.45)", fill: "forwards" });
+  const trail = setInterval(() => {
+    const g = ghost.getBoundingClientRect();
+    const d = document.createElement("i");
+    d.className = "fly-trail";
+    d.style.left = `${g.left + g.width / 2}px`;
+    d.style.top = `${g.top + g.height / 2}px`;
+    document.body.appendChild(d);
+    setTimeout(() => d.remove(), 520);
+  }, 24);
+  return anim.finished.then(() => {
+    clearInterval(trail);
+    ghost.remove();
+  });
+}
+
+function setCharged(n) {
+  ui.hudName.classList.toggle("charged", n === data.reactorsPerLevel - 1);
+}
+
 function hudLevel(level) {
   const lv = data.levels[level];
   ui.hudLevel.textContent = lv.name;
@@ -471,11 +512,12 @@ async function runBonus(startLevel, cap) {
   ui.hudSpins.textContent = st.spinsLeft;
   ui.hudMult.textContent = "×1";
   ui.hudTotal.textContent = fmt(0);
+  setCharged(0);
   sfx.bonus();
   await glitchHit(600);
-  await banner(data.levels[startLevel].name.toUpperCase(),
-    `${data.freeSpins} free spins · ${LEVEL_TEXT[startLevel]}<br>Collect 3 Reactors to level up`, 2600,
-    startLevel >= 2 ? "gold" : "");
+  music.start(startLevel);
+  await intro({ levels: data.levels, level: startLevel, spins: data.freeSpins, perLevel: data.reactorsPerLevel,
+    levelUpSpins: data.levelUpSpins, speed: speed(), auto: ui.auto.checked });
   clearFx();
   while (!st.done) {
     clearFx(true);
@@ -486,17 +528,20 @@ async function runBonus(startLevel, cap) {
 
     // Reactors fill the meter
     const top = res.levelBefore >= data.levels.length - 1;
-    for (let i = 0; i < res.reactorCells.length; i++) {
-      const [r, k] = res.reactorCells[i];
+    const before = meterShown;
+    await Promise.all(res.reactorCells.map(async ([r, k], i) => {
       ocells[r][k].classList.add("reactor-hit");
-      if (!top) {
-        meterShown++;
-        hudPips(Math.min(meterShown, 3), false);
-        bump(ui.pips[Math.min(meterShown, 3) - 1]);
-      }
+      await sleep(i * 170);
       sfx.reactor(i);
-      await sleep(260);
-    }
+      if (top) return;
+      const pip = ui.pips[Math.min(before + i, data.reactorsPerLevel - 1)];
+      await flyReactor(r, k, pip);
+      meterShown++;
+      hudPips(Math.min(meterShown, 3), false);
+      bump(pip);
+      setCharged(meterShown);
+    }));
+    if (res.reactorCells.length) await sleep(160);
     await showReveal(res.reveal);
     if (res.drops.length) {
       await showDrops(res.drops, res.shape, res.stickyBefore);
@@ -512,8 +557,9 @@ async function runBonus(startLevel, cap) {
     if (res.newSticky.length || (res.drops.length && data.levels[res.levelBefore].stickyCrosses)) {
       clearFx(true);
       renderSticky(st.sticky, origins, true);
-      tick(res.newSticky.length ? "Glitch Wilds <b>locked</b> for the rest of the bonus." :
-        "Override column <b>locked wild</b> for the rest of the bonus.");
+      const lockedCol = res.drops.length && data.levels[res.levelBefore].stickyCrosses;
+      tick([lockedCol && "Override column <b>locked wild</b>", res.newSticky.length && "Glitch Wilds <b>locked</b>"]
+        .filter(Boolean).join(" · ") + " for the rest of the bonus.");
       await sleep(650);
     }
     // Level-ups
@@ -521,12 +567,14 @@ async function runBonus(startLevel, cap) {
       const lvl = res.levelBefore + u + 1;
       meterShown = Math.max(0, meterShown - data.reactorsPerLevel);
       hudPips(meterShown, false);
+      setCharged(meterShown);
       sfx.levelUp();
       await glitchHit(500);
       hudLevel(lvl);
+      music.setLevel(lvl);
       ui.hudSpins.textContent = st.spinsLeft - (res.levelUps - u - 1) * data.levelUpSpins;
-      await banner(`LEVEL UP: ${data.levels[lvl].name.toUpperCase()}`,
-        `+${data.levelUpSpins} free spins<br>${LEVEL_TEXT[lvl]}`, 2400, lvl >= 2 ? "gold" : "");
+      await levelUp({ levels: data.levels, level: lvl, levelUpSpins: data.levelUpSpins,
+        speed: speed(), auto: ui.auto.checked });
     }
     if (st.level >= data.levels.length - 1) hudPips(3, true);
     ui.hudSpins.textContent = st.spinsLeft;
@@ -536,9 +584,10 @@ async function runBonus(startLevel, cap) {
     ui.hudTotal.textContent = fmt(round2(st.total * b));
     await sleep(900);
   }
-  const total = round2(st.total * b);
-  sfx.bigWin();
-  await countBanner("BONUS COMPLETE", total, 2600, st.level >= 2 ? "gold" : "");
+  music.stop();
+  await outro({ levels: data.levels, level: st.level, totalX: st.total, bet: b, floored: st.floored, fmt, sfx,
+    speed: speed(), auto: ui.auto.checked });
+  setCharged(0);
   document.body.classList.remove("in-bonus");
   delete document.body.dataset.level;
   ui.hud.hidden = true;
@@ -615,6 +664,7 @@ async function buyBonus(i) {
   render();
   clearFx();
   tick(`Bought the <b>${buy.name}</b> for ${fmt(cost)}.`);
+  await buySpin(Number(Object.keys(data.startLevel).find((c) => data.startLevel[c] === buy.startLevel)));
   const st = await runBonus(buy.startLevel, data.maxWin);
   const amount = round2(st.total * b);
   credit(amount);
@@ -623,6 +673,35 @@ async function buyBonus(i) {
   tick(`<b>${buy.name}</b> paid <span class="amt">${fmt(amount)}</span> (${(st.total / buy.price).toFixed(2)}× the price).`);
   S.busy = false;
   render();
+}
+
+/** Cosmetic trigger spin for a bonus buy: the reels land exactly `n` Capture Cores on random reels
+ *  (with the usual tease), so a buy plays out like a natural trigger. It pays nothing, and the bonus
+ *  itself is drawn separately, exactly as the verified model plays a buy. */
+async function buySpin(n) {
+  const strips = game.reelSets.base;
+  const order = [...Array(R).keys()].sort(() => Math.random() - 0.5);
+  const withCore = new Set(order.slice(0, n));
+  const stops = [];
+  const grid = [];
+  for (let r = 0; r < R; r++) {
+    const s = strips[r];
+    const L = s.length;
+    const window = (st) => Array.from({ length: K }, (_, k) => s[(st + k) % L]);
+    let stop;
+    if (withCore.has(r)) stop = (s.indexOf(CORE) - Math.floor(Math.random() * K) + L) % L;
+    else do stop = Math.floor(Math.random() * L); while (window(stop).includes(CORE));
+    stops.push(stop);
+    grid.push(window(stop));
+  }
+  const landed = grid.map((c) => c.slice());
+  const reveal = game.revealStatic(grid, null, "base");
+  await spinReels("base", landed, stops, null);
+  await showReveal(reveal);
+  coreHit(grid);
+  sfx.core();
+  tick(`<b>${n} Capture Cores!</b>`);
+  await sleep(1300);
 }
 
 // ---- Info dialog -----------------------------------------------------------------

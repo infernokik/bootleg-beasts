@@ -200,12 +200,12 @@ let PIXEL = new Set();
 try {
   const manifest = await (await fetch("assets/symbols/manifest.json", { cache: "no-cache" })).json();
   PIXEL = new Set(manifest.codes);
-  for (const code of PIXEL) new Image().src = `assets/symbols/${code}.png?v=8`; // warm the cache
+  for (const code of PIXEL) new Image().src = `assets/symbols/${code}.png?v=11`; // warm the cache
 } catch {
   /* no pixel art: vector symbols only */
 }
 
 export function symbolHTML(code) {
-  if (PIXEL.has(code)) return `<img class="px" src="assets/symbols/${code}.png?v=8" alt="" draggable="false">`;
+  if (PIXEL.has(code)) return `<img class="px" src="assets/symbols/${code}.png?v=11" alt="" draggable="false">`;
   return svgFor(code);
 }

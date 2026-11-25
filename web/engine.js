@@ -224,7 +224,7 @@ export class Game {
         }
       addShape(mask, dr, dk, lv.shape);
     }
-    if (lv.stickyCrosses) for (const [r, k] of drops) addShape(st.sticky, r, k, lv.shape);
+    if (lv.stickyCrosses) for (const [r, k] of drops) addShape(st.sticky, r, k, 1); // column locks; a cross row is one spin
     st.nDrop += drops.length;
     const { total: base, lines } = this.waysWin(grid, mask, true);
     let spinWin = base * lv.mult * spinMult;

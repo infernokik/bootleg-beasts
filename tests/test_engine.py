@@ -203,6 +203,8 @@ def test_lockdown_locks_override_columns():
     dead = [["L5"] * 5] * 5
     (_, _, drops, _, _, _), sticky = _bonus(dead, 2, EVERY_SPIN)
     assert drops == 3 and sticky[1:4].all() and not sticky[0].any()  # each locked column fills one of reels 2-4
+    (_, _, drops, _, _, _), sticky = _bonus(dead, 3, EVERY_SPIN)  # Overload: crosses, but only the column locks
+    assert drops == 3 and sticky[1:4].all() and not sticky[0].any() and not sticky[4].any()
     for level in (0, 1):
         (_, _, drops, _, _, _), sticky = _bonus(dead, level, EVERY_SPIN)
         assert drops == 10 and not sticky.any()

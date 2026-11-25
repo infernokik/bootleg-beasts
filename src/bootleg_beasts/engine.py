@@ -222,9 +222,9 @@ def bonus_round(
                             spin_mult += cap_v[level, draw_count(cap_c[level])]
                             mask[r, k] = True
                 add_shape(mask, ow_r[i], ow_k[i], shapes[level])
-            if sticky_x[level]:
+            if sticky_x[level]:  # the Override's column locks (on Overload the row is one spin only)
                 for i in range(n_new):
-                    add_shape(sticky, ow_r[i], ow_k[i], shapes[level])
+                    add_shape(sticky, ow_r[i], ow_k[i], 1)
         n_drop += n_new
         total += ways_win(grid, mask, paytable, cnt) * mults[level] * spin_mult
         if total >= cap:
