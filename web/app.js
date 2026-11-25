@@ -1,10 +1,10 @@
 // Bootleg Beasts: browser UI. Every outcome comes from engine.js, which uses the same reel strips,
 // weights and rules as the verified Python model (game-data.json).
-import { Game, CORE, REACTOR } from "./engine.js?v=7";
-import { symbolHTML } from "./symbols.js?v=7";
-import { Fx, shake, glitchHit } from "./fx.js?v=7";
-import { startBackground } from "./background.js?v=7";
-import { sfx, isMuted, setMuted } from "./sfx.js?v=7";
+import { Game, CORE, REACTOR } from "./engine.js?v=8";
+import { symbolHTML } from "./symbols.js?v=8";
+import { Fx, shake, glitchHit } from "./fx.js?v=8";
+import { startBackground } from "./background.js?v=8";
+import { sfx, isMuted, setMuted } from "./sfx.js?v=8";
 
 try {
   startBackground(document.getElementById("bg"));
@@ -223,7 +223,7 @@ function spinReel(r, key, col, stop, plan, pitch, sticky) {
       if ((col[k] === CORE || col[k] === REACTOR) && !(sticky && sticky[r][k])) {
         if (col[k] === CORE) sfx.core();
         const [x, y] = fx.at(ocells[r][k]);
-        const colors = col[k] === CORE ? ["#ffc531", "#fff1a8", "#ff8a3d"] : ["#78ff78", "#e6ffc8", "#28c85a"];
+        const colors = ["#ffc531", "#fff1a8", "#ff8a3d"];
         fx.burst(x, y, { n: 18, colors, speed: 3.5, size: 3, life: 35 });
       }
     }

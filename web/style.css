@@ -284,7 +284,7 @@ body::before {
 .cell[data-sym^="L"] img.px { transform: scale(.82); filter: saturate(.75) brightness(.85); }
 .cell[data-sym="W"], .cell[data-sym="S"], .cell[data-sym="R"] { animation: specialGlow 1.4s ease-in-out infinite alternate; }
 .cell[data-sym="S"] { --glow: rgba(255,197,49,.8); }
-.cell[data-sym="R"] { --glow: rgba(120,255,120,.8); }
+.cell[data-sym="R"] { --glow: rgba(255,197,49,.8); }
 .cell[data-sym="W"] { --glow: rgba(255,43,214,.8); }
 @keyframes specialGlow { from { box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); } to { box-shadow: inset 0 0 0 2px var(--glow), inset 0 0 22px var(--glow); } }
 .cell[data-sym="X"] img.px { filter: grayscale(.3) brightness(.85); }
@@ -299,7 +299,7 @@ body::before {
 @keyframes tvGlitch { 0% { transform: translate(-3px, 1px); filter: hue-rotate(90deg) saturate(3); } 100% { transform: translate(3px, -1px); filter: invert(.3) brightness(1.6); } }
 .ocell.captured { overflow: visible; z-index: 4; box-shadow: 0 0 0 3px #ffc531, 0 0 30px rgba(255,197,49,.9); animation: capture .5s cubic-bezier(.2,1.6,.4,1); }
 @keyframes capture { 0% { transform: scale(1.4); } 100% { transform: none; } }
-.ocell.reactor-hit { overflow: visible; box-shadow: 0 0 0 3px #78ff78, 0 0 28px rgba(120,255,120,.85); animation: winPulse calc(.45s * var(--t)) ease-in-out 2; }
+.ocell.reactor-hit { overflow: visible; box-shadow: 0 0 0 3px #ffc531, 0 0 28px rgba(255,197,49,.85); animation: winPulse calc(.45s * var(--t)) ease-in-out 2; }
 .cap-pop {
   position: absolute; z-index: 9; pointer-events: none; transform: translate(-50%, -50%);
   font: 900 clamp(18px, 3.4vw, 30px)/1 "Arial Black", Impact, sans-serif; color: #fff1a8;
@@ -318,8 +318,8 @@ body::before {
 /* ---- Bonus HUD: level + Reactor meter ------------------------------------------------ */
 .hud { grid-template-columns: 1.7fr 1fr 1.1fr 1.2fr; }
 .pips { display: inline-flex; gap: 4px; margin-left: 4px; vertical-align: middle; }
-.pip { width: 10px; height: 10px; border-radius: 2px; transform: rotate(45deg); background: #1d2a1d; border: 1px solid #3d6a3d; display: inline-block; }
-.pip.on { background: #78ff78; border-color: #e6ffc8; box-shadow: 0 0 8px #78ff78; }
+.pip { width: 10px; height: 10px; border-radius: 2px; transform: rotate(45deg); background: #2a241a; border: 1px solid #6a5a2d; display: inline-block; }
+.pip.on { background: #ffc531; border-color: #fff2c8; box-shadow: 0 0 8px #ffc531; }
 .pip.bump { animation: bump .5s ease-out; }
 #hudLevel { color: var(--cyan); }
 body[data-level="1"] #hudLevel { color: #c06bff; }

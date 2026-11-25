@@ -76,7 +76,7 @@ web/            playable demo (vanilla JS, no build step), deployed by GitHub Pa
   fx.js         particles, beams, screen shake, glitch transitions
   background.js animated pixel-art city (canvas)
   selftest.html checks engine.js against the Python model
-art/            source art (Gemini), pixel-art converter, procedural Static and Reactor
+art/            source art (Gemini), pixel-art converter, procedural Static
 tests/          pytest unit tests
 docs/           design spec, par sheet, art brief
 reports/        results.json and charts
@@ -102,4 +102,4 @@ modern high-volatility studios, but uses no existing franchise's characters, art
 
 **Art credit:** symbol art was generated with Google Gemini from original prompts
 ([docs/art_brief.md](docs/art_brief.md)), then converted to pixel art with a shared palette by
-[art/pixelate.py](art/pixelate.py). The Static and Reactor tiles are generated procedurally.
+[art/pixelate.py](art/pixelate.py). The Static tile is generated procedurally. The Reactor reuses the Capture Core art.

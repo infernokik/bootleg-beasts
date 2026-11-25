@@ -67,7 +67,7 @@ Two reasons matter to a studio:
 | W | **Glitch Wild** | A corrupted, pixel-tearing tile. Substitutes for every paying symbol | Reels 2–5 |
 | OW | **Override Wild** | Wild cross or column (section 4). **Dropped onto the grid by the game, not on the reel strips** | Reels 2–4 |
 | S | **Capture Core** | A glowing hexagonal containment device. Triggers the bonus | All reels, max 1 per reel |
-| R | **Reactor** | A pulsing power cell. Collect 3 in the bonus to level up | Bonus reels 1–4 |
+| R | **Reactor** | Same yellow art as the Capture Core. Collect 3 in the bonus to level up | Bonus reels 1–4 |
 | X | **Static** | A glitching TV. Mystery symbol: all Statics reveal the same random symbol each spin | All reels |
 
 ### Paytable (pays per way, × total bet)
@@ -229,5 +229,5 @@ on every level (one cross alone paid more than the buy price).
 ## 9. Decisions still open
 
 1. **Volatility.** Medium would need flatter captures and a higher floor (section 6).
-2. **Reactor art** is procedural (`art/make_reactor.py`). It can be swapped for Gemini art.
+2. **Reactor art** reuses the yellow Capture Core art, so the bonus collect symbol matches the trigger.
 3. **Optional extras:** an ante bet.

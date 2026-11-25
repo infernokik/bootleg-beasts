@@ -34,5 +34,4 @@ is best"). Keep all art original (no Pokémon or other IP; no adult content in p
 ## Ideas if the user wants more
 
 1. Lower volatility toward medium (flatter CAPTURE values, higher MIN_BONUS_WIN, retune).
-2. Replace the procedural Reactor (`art\make_reactor.py`) with Gemini art in `art\gemini`, rerun `art\pixelate.py`.
 3. Ante bet; mobile layout polish.
