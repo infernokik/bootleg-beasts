@@ -60,6 +60,10 @@ sims/
 web/            playable demo (vanilla JS, no build step), deployed by GitHub Pages
   engine.js     line-for-line port of engine.py
   selftest.html checks engine.js against the Python model
+  assets/symbols/  64x64 pixel-art symbols (made by art/pixelate.py)
+art/
+  gemini/       source symbol art generated with Google Gemini
+  pixelate.py   converts it to pixel art with one shared 48-colour palette
 tests/          pytest unit tests
 docs/           design & math spec
 reports/        results (charts and par sheet coming next)
@@ -93,3 +97,7 @@ Requires Python 3.12+.
 
 The theme and creatures are original. The game takes the creature-catching *genre* and the style of
 modern high-volatility studios, but uses no existing franchise's characters, art or mechanic names.
+
+**Art credit:** symbol art was generated with Google Gemini from original prompts
+([docs/art_brief.md](docs/art_brief.md)), then converted to pixel art with a shared palette by
+[art/pixelate.py](art/pixelate.py). The Static tile is generated procedurally.

@@ -1,7 +1,7 @@
 // Bootleg Beasts: browser UI. Every outcome comes from engine.js, which uses the same reel strips,
 // weights and rules as the verified Python model (game-data.json).
 import { Game, WILD, OVERRIDE, CORE } from "./engine.js";
-import { svgFor } from "./symbols.js";
+import { symbolHTML } from "./symbols.js";
 
 const data = await (await fetch("game-data.json")).json();
 const game = new Game(data);
@@ -79,7 +79,7 @@ function setSym(cell, sym) {
   const code = CODES[sym];
   if (cell.dataset.sym === code) return;
   cell.dataset.sym = code;
-  cell.innerHTML = svgFor(code);
+  cell.innerHTML = symbolHTML(code);
   cell.setAttribute("aria-label", NAMES[sym]);
 }
 
@@ -396,7 +396,7 @@ function buildInfo() {
   const s = data.stats || {};
   const [sh, nr] = data.tiers;
   const rows = data.symbols.slice(0, 9).map((sym) =>
-    `<tr><td><span class="pt-sym">${svgFor(sym.code)}${sym.name}</span></td>` +
+    `<tr><td><span class="pt-sym">${symbolHTML(sym.code)}${sym.name}</span></td>` +
     data.paytable[sym.code].map((p) => `<td>${fmt(p * b)}</td>`).join("") + "</tr>").join("");
   const stat = (v, label) => `<div class="stat"><b>${v}</b><span>${label}</span></div>`;
   ui.infoBody.innerHTML = `

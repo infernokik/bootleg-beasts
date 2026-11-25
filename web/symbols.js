@@ -186,10 +186,25 @@ const ART = {
 };
 
 const cache = {};
-export function svgFor(code) {
+function svgFor(code) {
   if (!cache[code]) {
     const [vb, body] = ART[code];
     cache[code] = `<svg viewBox="0 0 ${vb} ${vb}" aria-hidden="true">${body}</svg>`;
   }
   return cache[code];
+}
+
+// Pixel-art symbols made by art/pixelate.py. Any symbol without one falls back to the vector art.
+let PIXEL = new Set();
+try {
+  const manifest = await (await fetch("assets/symbols/manifest.json")).json();
+  PIXEL = new Set(manifest.codes);
+  for (const code of PIXEL) new Image().src = `assets/symbols/${code}.png`; // warm the cache
+} catch {
+  /* no pixel art: vector symbols only */
+}
+
+export function symbolHTML(code) {
+  if (PIXEL.has(code)) return `<img class="px" src="assets/symbols/${code}.png" alt="" draggable="false">`;
+  return svgFor(code);
 }

@@ -111,7 +111,9 @@ body.tier-legendary .grid { border-color: rgba(255, 197, 49, 0.7); box-shadow: 0
 .cell[data-sym="W"] { background: radial-gradient(circle at 50% 50%, #2d0a33, #140820 75%); }
 .cell[data-sym="X"] { background: #0e0e13; }
 
-.cell.spinning svg { filter: blur(2px) brightness(.8); transform: translateY(6%); }
+.cell img.px { width: 100%; height: 100%; display: block; image-rendering: pixelated; user-select: none; }
+.cell:has(img.px) { background: #0b0d1e; }
+.cell.spinning svg, .cell.spinning img.px { filter: blur(2px) brightness(.8); transform: translateY(6%); }
 .cell.land { animation: land calc(.22s * var(--t)) ease-out; }
 @keyframes land { 0% { transform: translateY(-14%); } 70% { transform: translateY(3%); } 100% { transform: none; } }
 
@@ -217,7 +219,7 @@ dialog table { width: 100%; border-collapse: collapse; font-variant-numeric: tab
 dialog th, dialog td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; }
 dialog th:first-child, dialog td:first-child { text-align: left; }
 .pt-sym { display: flex; align-items: center; gap: 10px; }
-.pt-sym svg { width: 34px; height: 34px; }
+.pt-sym svg, .pt-sym img.px { width: 40px; height: 40px; border-radius: 6px; image-rendering: pixelated; }
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
 .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
 .stat b { display: block; font-size: 18px; }
