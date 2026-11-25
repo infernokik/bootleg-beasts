@@ -16,17 +16,22 @@ import numpy as np
 
 from bootleg_beasts import engine
 from bootleg_beasts.config import (
+    BUYS,
+    CAPTURE,
     CODES,
+    FREE_SPINS,
+    LEVEL_UP_SPINS,
+    LEVELS,
     MAX_WIN,
+    MIN_BONUS_WIN,
     N_PAYING,
     NAMES,
     OVERRIDE_REELS,
     PAYTABLE,
+    REACTORS_PER_LEVEL,
     REELS,
-    RETRIGGER_CORES,
-    RETRIGGER_SPINS,
     ROWS,
-    TIERS,
+    START_LEVEL,
     Model,
 )
 
@@ -41,16 +46,16 @@ def stats() -> dict:
     r = json.loads(path.read_text(encoding="utf-8"))
     return {
         "rtp": r["rtp_from_parts"]["rtp"],
-        "baseRtp": r["exact"]["rtp_base_ways"],
-        "bonusMean": {t.key: r["bonus"][t.key]["mean_win"] for t in TIERS},
-        "bonusStd": {t.key: r["bonus"][t.key]["std"] for t in TIERS},
         "rtpCi95": r["rtp_from_parts"]["ci95"],
+        "baseRtp": r["exact"]["rtp_base_ways"],
         "simSpins": r["game"]["spins"],
-        "simRtp": r["game"]["rtp"],
         "hitRate": r["game"]["hit_rate"],
-        "maxWinOdds": 1 / r["game"]["p_max_win"],
+        "std": r["game"]["std"],
+        "maxWinOdds": 1 / max(r["game"]["p_max_win"], 1e-12),
         "triggerOdds": [1 / p for p in r["exact"]["p_trigger"]],
-        "buyRtp": {t.key: r["bonus"][t.key].get("buy_rtp") for t in TIERS},
+        "bonusMean": [r["bonus"][lv.key]["mean_win"] for lv in LEVELS[:3]],
+        "levelReach": [r["bonus"][lv.key]["final_level_share"] for lv in LEVELS[:3]],
+        "buyRtp": {k: v["rtp"] for k, v in r["buys"].items()},
     }
 
 
@@ -90,16 +95,20 @@ def main() -> None:
         "paytable": {CODES[s]: PAYTABLE[s, 3:].tolist() for s in range(N_PAYING)},
         "maxWin": MAX_WIN,
         "overrideReels": list(OVERRIDE_REELS),
-        "retrigger": {"cores": RETRIGGER_CORES, "spins": RETRIGGER_SPINS},
-        "tiers": [
-            {
-                "key": t.key, "name": t.name, "cores": t.cores, "freeSpins": t.free_spins,
-                "stickyMode": t.sticky_mode, "multStep": t.mult_step,
-                "preplaced": t.preplaced_crosses, "guaranteed": t.guaranteed_cross,
-                "buyPrice": t.buy_price,
-            }
-            for t in TIERS
+        "freeSpins": FREE_SPINS,
+        "reactorsPerLevel": REACTORS_PER_LEVEL,
+        "levelUpSpins": LEVEL_UP_SPINS,
+        "startLevel": {str(k): v for k, v in START_LEVEL.items()},
+        "minBonusWin": list(MIN_BONUS_WIN),
+        "levels": [
+            {"key": lv.key, "name": lv.name, "mult": lv.mult, "shape": lv.override_shape,
+             "stickyWilds": lv.sticky_wilds, "stickyCrosses": lv.sticky_crosses,
+             "capture": {"values": list(CAPTURE[i][0]), "weights": list(CAPTURE[i][1])}}
+            for i, lv in enumerate(LEVELS)
         ],
+        "buys": [{"key": b.key, "name": b.name, "startLevel": b.start_level, "price": model.buy_prices[b.key]}
+                 for b in BUYS],
+        "revealWeights": model.reveal_weights,
         "reelSets": {k: rs.strips[:, : int(rs.lens.max())].tolist() for k, rs in model.reels.items()},
         "reelLengths": {k: rs.lens.tolist() for k, rs in model.reels.items()},
         "overrideWeights": model.override_weights,

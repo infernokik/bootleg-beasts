@@ -190,20 +190,22 @@ def test_starting_level_skips_ahead():
     assert (played, final) == (14, 3)
 
 
-def test_lockdown_locks_glitch_wilds():
+def test_only_overload_locks_glitch_wilds():
     reels = [["L5"] * 5, ["W", "L5", "L5", "L5", "L5", "L5", "L5"]] + [["L5"] * 5] * 3
-    _, sticky = _bonus(reels, 2)
+    _, sticky = _bonus(reels, 3)
     assert sticky[1].any() and not sticky[0].any() and not sticky[2:].any()
-    _, sticky = _bonus(reels, 1)  # Night Raid: wilds don't lock
-    assert not sticky.any()
+    for level in (0, 1, 2):  # wilds only lock on Overload
+        _, sticky = _bonus(reels, level)
+        assert not sticky.any()
 
 
-def test_only_overload_locks_crosses():
+def test_lockdown_locks_override_columns():
     dead = [["L5"] * 5] * 5
-    (_, _, drops, _, _, _), sticky = _bonus(dead, 3, EVERY_SPIN)
-    assert drops == 3 and sticky[1:4].all()  # each locked cross fills one of reels 2-4
-    (_, _, drops, _, _, _), sticky = _bonus(dead, 0, EVERY_SPIN)
-    assert drops == 10 and not sticky.any()
+    (_, _, drops, _, _, _), sticky = _bonus(dead, 2, EVERY_SPIN)
+    assert drops == 3 and sticky[1:4].all() and not sticky[0].any()  # each locked column fills one of reels 2-4
+    for level in (0, 1):
+        (_, _, drops, _, _, _), sticky = _bonus(dead, level, EVERY_SPIN)
+        assert drops == 10 and not sticky.any()
 
 
 def test_guaranteed_cross():

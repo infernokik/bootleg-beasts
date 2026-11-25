@@ -1,75 +1,84 @@
 # Bootleg Beasts — Slot Math & Simulation
 
-A high-volatility 5×5, 3,125-ways slot. Its **cross wild** turns its whole row and column wild, and
-**three bonus tiers** are triggered by 3, 4 or 5 scatters. The top tier is hidden and can't be
-bought. This repo has the full math model, an exact calculation of the base game, and Monte Carlo
-verification showing the game hits **96% RTP**.
+A 5×5, 3,125-ways slot with a **level-up bonus**. Collect Reactors to unlock new features, and hunt
+beasts with the **Override Wild**: every beast it hits adds to the spin multiplier. This repo has the
+full math model, an exact calculation of the base game, and Monte Carlo verification showing the game
+hits **96% RTP**.
 
 ### ▶ [Play the free demo](https://infernokik.github.io/bootleg-beasts/)
 
 The browser demo plays the exact same reel strips, weights and rules as the verified model. Its
-[self-test page](https://infernokik.github.io/bootleg-beasts/selftest.html) checks the JavaScript engine against Python in your browser:
-identical wins on 1,500 exported grids, the same bonus rules, and matching RTP by simulation.
-Virtual credits only, no real-money play.
+[self-test page](https://infernokik.github.io/bootleg-beasts/selftest.html) checks the JavaScript
+engine against Python in your browser. Virtual credits only, no real-money play.
+
+## Features
+
+- **Static TVs** are mystery symbols: every Static on screen reveals the same random symbol.
+- **Override Wild** drops a wild cross in the base game (about 1 in 1,500 spins).
+- **Bonus with four levels**, started by 3, 4 or 5 Capture Cores. Every 3 Reactors give +4 spins and the next level:
+  Street Hunt → Night Raid → **Lockdown** (Override columns lock wild) → **Overload** (full crosses, Glitch Wilds lock).
+- **Beast capture:** each beast under an Override adds +1 to +3 to that spin's multiplier, and captures stack.
+- **Bonus buys:** Bonus (100×) and Super Bonus (230×, starts on level 2). Guaranteed minimum win per start level.
+- Synthesized chiptune sound effects, scrolling reels, particle effects and an animated pixel city.
 
 ## Headline numbers
 
 | | Result |
 |---|---|
-| **RTP, exact base + simulated bonuses** | **95.997% ± 0.004%** |
-| RTP, 10¹⁰ full-game spins | 95.984% ± 0.024% |
-| Street Hunt buy (100×) RTP | 96.18% ± 0.01% |
-| Night Raid buy (300×) RTP | 96.23% ± 0.03% |
-| Hit frequency | 29.6% |
-| Volatility (SD per spin) | 12.5× bet |
-| Bonus odds (3 / 4 / 5 Cores) | 1 in 291 / 1 in 7,300 / 1 in 458,417 spins |
-| Max win 10,000× | 1 in 1,778,410 spins |
+| **RTP, exact base + simulated bonus** | **96.03% ± 0.04%** |
+| RTP, 2×10⁹ full-game spins | 96.03% ± 0.09% (z = −0.07) |
+| Bonus buy (100×) RTP | 96.22% ± 0.15% |
+| Super Bonus buy (230×) RTP | 95.98% ± 0.12% |
+| Hit frequency | 30.8% |
+| Volatility (SD per spin) | 21.0× bet |
+| Bonus odds (3 / 4 / 5 Cores) | 1 in 342 / 1 in 9,140 / 1 in 610,574 spins |
+| Max win 5,000× | 1 in 149,948 spins |
 
-Full design, results and the design iteration log: **[docs/design_spec.md](docs/design_spec.md)**.
+Full numbers: **[par sheet](docs/par_sheet.md)**. Design, rules and the iteration log:
+**[docs/design_spec.md](docs/design_spec.md)**.
+
+![RTP convergence](reports/rtp_convergence.png)
+![Player sessions](reports/sessions.png)
 
 ## How the RTP is proven
 
 - **Exact base game.** Reel stops are independent, so the expected ways win factorises into a product
-  of per-reel expectations. The exact base RTP takes milliseconds to compute. A brute-force pass
-  over all 1.43 billion base-reel stop combinations matches it to ten decimal places.
-- **Bonuses by Monte Carlo.** Each tier is simulated on its own for 10⁸ rounds, giving mean payouts
-  with 95% confidence intervals.
-- **Independent full-game check.** 10¹⁰ complete rounds are played the way a player would play them.
-  The result has to agree with exact + bonus parts within the confidence interval.
-- **Unit tests** cover ways evaluation, the cross, every bonus rule, and formula-vs-brute-force on
-  small reels.
+  of per-reel expectations, for each Static reveal and Override position. A brute-force pass over all
+  1.91 billion base-reel stop combinations matches it to ten decimal places.
+- **Bonus by Monte Carlo.** Each start level is simulated for 2×10⁷ rounds, with 95% confidence intervals.
+- **Independent full-game check.** 2×10⁹ complete rounds are played the way a player would play them,
+  and the result agrees with exact + bonus parts.
+- **Unit tests** cover ways evaluation, crosses, reveals, level-ups, captures, locks and formula-vs-brute-force.
+- **JS engine self-test** checks the browser engine against Python test vectors and by simulation.
 
-The simulator is NumPy + Numba. It runs on all CPU cores with a reproducible seed per chunk, at
-about **55 million game rounds per second** on a 12-core desktop (10¹⁰ spins in about 3 minutes).
+The simulator is NumPy + Numba, running on all CPU cores with a reproducible seed per chunk.
 
 ## Layout
 
 ```
 src/bootleg_beasts/
-  config.py     symbols, paytable, bonus rules, model loading
-  engine.py     Numba kernels: ways evaluation, cross wild, base spin, bonus round, batch simulators
+  config.py     symbols, paytable, bonus levels, captures, model loading
+  engine.py     Numba kernels: ways, reveals, Override drops, base spin, bonus round, batch simulators
   exact.py      exact base-game RTP (factorised) + brute-force full-cycle check
   sim.py        Python wrappers: run simulations, summarise, confidence intervals
   reelgen.py    builds reel strips from a symbol composition
-  model.json    the tuned model: reel strips + Override Wild drop weights
+  model.json    the tuned model: reel strips, Override drop weights, reveal weights, buy prices
 sims/
   tune.py       builds the reels and tunes drop rates to the RTP targets
-  verify.py     runs all three verifications, writes reports/results.json + convergence.csv
-  summarize.py  turns the results into the Markdown tables used in the docs
+  verify.py     runs all verifications, writes reports/results.json + convergence.csv
+  charts.py     charts (reports/*.png) and the par sheet (docs/par_sheet.md)
   export_web.py exports the model + JS test vectors for the browser demo
 web/            playable demo (vanilla JS, no build step), deployed by GitHub Pages
   engine.js     line-for-line port of engine.py
-  app.js        UI: scrolling reels, bonus tease, overlay for wild crosses and locked wilds
+  app.js        UI: reels, reveals, Override beams, captures, level meter, win presentation
+  sfx.js        synthesized WebAudio sound effects
   fx.js         particles, beams, screen shake, glitch transitions
   background.js animated pixel-art city (canvas)
   selftest.html checks engine.js against the Python model
-  assets/symbols/  96x96 pixel-art symbols (made by art/pixelate.py)
-art/
-  gemini/       source symbol art generated with Google Gemini
-  pixelate.py   converts it to pixel art with one shared 64-colour palette
+art/            source art (Gemini), pixel-art converter, procedural Static and Reactor
 tests/          pytest unit tests
-docs/           design & math spec
-reports/        results (charts and par sheet coming next)
+docs/           design spec, par sheet, art brief
+reports/        results.json and charts
 ```
 
 ## Run it (Windows)
@@ -79,23 +88,11 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe sims\tune.py
-.\.venv\Scripts\python.exe sims\verify.py --spins 1e10
+.\.venv\Scripts\python.exe sims\verify.py --spins 2e9
+.\.venv\Scripts\python.exe sims\charts.py
 ```
 
 Requires Python 3.12+.
-
-## Roadmap
-
-| Part | Status |
-|---|---|
-| Design & math spec | Done (v0.2) |
-| Exact base game + full-cycle check | Done |
-| Simulator, tuning to 96% | Done |
-| Playable browser demo + JS-vs-Python self-test | Done |
-| Pixel-art symbols, logo, animated background, reel and win animations | Done |
-| Charts: RTP convergence, RTP split, win distribution, bonus buy profiles | Next |
-| Player-session simulation | Next |
-| Par sheet | Next |
 
 ## Note on originality
 
@@ -104,4 +101,4 @@ modern high-volatility studios, but uses no existing franchise's characters, art
 
 **Art credit:** symbol art was generated with Google Gemini from original prompts
 ([docs/art_brief.md](docs/art_brief.md)), then converted to pixel art with a shared palette by
-[art/pixelate.py](art/pixelate.py). The Static tile is generated procedurally.
+[art/pixelate.py](art/pixelate.py). The Static and Reactor tiles are generated procedurally.

@@ -1,8 +1,8 @@
 // Checks the JavaScript engine against the Python model:
 //   1. ways evaluation on 1,500 grids exported from Python (must match exactly)
-//   2. bonus rules on dead reels (same cases as tests/test_engine.py)
-//   3. Monte Carlo: base game and both buys vs the verified Python numbers
-import { Game, setRandInt } from "./engine.js";
+//   2. bonus rules on hand-built reels (same cases as tests/test_engine.py)
+//   3. Monte Carlo: base game, Bonus and Super Bonus vs the verified Python numbers
+import { Game, setRandInt } from "./engine.js?v=6";
 
 const out = document.getElementById("out");
 const results = { pass: 0, fail: 0 };
@@ -12,9 +12,10 @@ const check = (ok, s) => {
   log(`${ok ? "PASS" : "FAIL"}  ${s}`);
 };
 
-const data = await (await fetch("game-data.json")).json();
-const vectors = await (await fetch("test-vectors.json")).json();
+const data = await (await fetch("game-data.json", { cache: "no-cache" })).json();
+const vectors = await (await fetch("test-vectors.json", { cache: "no-cache" })).json();
 const game = new Game(data);
+const id = Object.fromEntries(data.symbols.map((s, i) => [s.code, i]));
 
 // 1. Ways evaluation
 let maxErr = 0;
@@ -24,31 +25,40 @@ for (const v of vectors) {
 }
 check(maxErr < 1e-9, `ways evaluation matches Python on ${vectors.length} grids (max diff ${maxErr})`);
 
-// 2. Bonus rules on dead reels
-function deadGame(weights) {
-  // Zero paytable so no bonus ends early at the max-win cap (same as the Python test).
+// 2. Bonus rules on hand-built reels
+function customGame(reels, { weights = [1, 0, 0], pays = null, capture = null } = {}) {
   const d = structuredClone(data);
-  for (const code of Object.keys(d.paytable)) d.paytable[code] = [0, 0, 0];
-  const L5 = d.symbols.findIndex((s) => s.code === "L5");
-  for (const t of d.tiers) {
-    d.reelSets[t.key] = d.reelSets[t.key].map((s) => s.map(() => L5));
-    d.overrideWeights[t.key] = weights;
+  d.reelSets.bonus = reels.map((r) => r.map((c) => id[c]));
+  d.reelLengths.bonus = reels.map((r) => r.length);
+  for (const lv of d.levels) {
+    d.overrideWeights[lv.key] = weights;
+    if (capture) lv.capture = capture;
   }
+  for (const code of Object.keys(d.paytable)) d.paytable[code] = [0, 0, 0];
+  if (pays) Object.assign(d.paytable, pays);
+  d.minBonusWin = [0, 0, 0, 0];
+  d.revealWeights.bonus = { L5: 1 };
   return new Game(d);
 }
-const every = deadGame([0, 1, 0]);
-const never = deadGame([1, 0, 0]);
-const expectEvery = [[10, 10, 1], [10, 3, 4], [10, 2, 5]];
-const expectNever = [1, 1, 0];
-data.tiers.forEach((t, i) => {
-  const a = every.playBonus(i);
-  check(
-    a.played === expectEvery[i][0] && a.nDrop === expectEvery[i][1] && a.mult === expectEvery[i][2],
-    `${t.name}: Override every spin -> ${a.played} spins, ${a.nDrop} drops, x${a.mult}`,
-  );
-  const b = never.playBonus(i);
-  check(b.nDrop === expectNever[i], `${t.name}: no natural drops -> ${b.nDrop} (guaranteed cross rule)`);
-});
+const L5x5 = ["L5", "L5", "L5", "L5", "L5"];
+const ONE_REACTOR = [["R", "L5", "L5", "L5", "L5"], L5x5, L5x5, L5x5, L5x5];
+let st = customGame(ONE_REACTOR).playBonus(0);
+check(st.played === 22 && st.level === 3 && st.reactors === 22,
+  `3 Reactors per level, +4 spins each: ${st.played} spins, final level ${st.level + 1}`);
+st = customGame(ONE_REACTOR).playBonus(2);
+check(st.played === 14 && st.level === 3, `starting on level 3 skips ahead: ${st.played} spins`);
+const beasts = Array(5).fill(["H1", "H1", "H1", "H1", "H1"]);
+const two = { values: [2, 2, 2], weights: [1, 1, 1] };
+const zero = { values: [0, 0, 0], weights: [1, 1, 1] };
+const withCap = customGame(beasts, { weights: [0, 1, 0], pays: { H1: [0, 0, 0.001] }, capture: two }).playBonus(0).total;
+const noCap = customGame(beasts, { weights: [0, 1, 0], pays: { H1: [0, 0, 0.001] }, capture: zero }).playBonus(0).total;
+check(Math.abs(withCap - 11 * noCap) < 1e-9, `captured beasts stack: x${(withCap / noCap).toFixed(2)} (expect x11)`);
+const lockGame = customGame([L5x5, L5x5, L5x5, L5x5, L5x5], { weights: [0, 1, 0] });
+st = lockGame.playBonus(2);
+check(st.nDrop === 3 && [1, 2, 3].every((r) => st.sticky[r].every(Boolean)),
+  `Lockdown locks each Override column: ${st.nDrop} drops`);
+st = lockGame.playBonus(0);
+check(st.nDrop === 10 && !st.sticky.flat().some(Boolean), "Street Hunt columns don't lock");
 
 // 3. Monte Carlo against the verified Python numbers (fast PRNG; |z| < 3 passes)
 setRandInt((n) => Math.floor(Math.random() * n));
@@ -69,9 +79,9 @@ function mc(label, n, sample, expected) {
     `(z = ${z.toFixed(2)}, ${n.toLocaleString()} rounds, ${((performance.now() - t0) / 1000).toFixed(1)}s)`);
 }
 await new Promise((r) => setTimeout(r, 0));
-mc("Base game ways RTP", 6_000_000, () => game.baseSpin().win, s.baseRtp);
-mc("Street Hunt mean payout", 200_000, () => game.playBonus(0).total, s.bonusMean.street_hunt);
-mc("Night Raid mean payout", 200_000, () => game.playBonus(1).total, s.bonusMean.night_raid);
+mc("Base game ways RTP", 4_000_000, () => game.baseSpin().win, s.baseRtp);
+mc("Bonus (level 1 start) mean payout", 150_000, () => game.playBonus(0).total, s.bonusMean[0]);
+mc("Super Bonus (level 2 start) mean payout", 100_000, () => game.playBonus(1).total, s.bonusMean[1]);
 setRandInt(null);
 
 log(`\n${results.pass} passed, ${results.fail} failed`);

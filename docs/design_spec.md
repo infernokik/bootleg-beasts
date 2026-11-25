@@ -1,6 +1,6 @@
 # Bootleg Beasts — Game Design & Math Spec
 
-**Status:** v0.2, tuned. The math model is in [`src/bootleg_beasts/model.json`](../src/bootleg_beasts/model.json),
+**Status:** v0.3 (Reactor level-up redesign), tuned. The math model is in [`src/bootleg_beasts/model.json`](../src/bootleg_beasts/model.json),
 built by [`sims/tune.py`](../sims/tune.py) and verified by [`sims/verify.py`](../sims/verify.py).
 **Title:** *Bootleg Beasts*. No released slot with this name turned up in a search in November 2026.
 
@@ -47,7 +47,7 @@ Two reasons matter to a studio:
 | Win per symbol | `pay[symbol][length] × ways × bet` |
 | Ways | product of (matching symbols + wilds) on each reel in the run |
 | Bet | 1 unit = total bet. All pays are multiples of total bet |
-| Max win | **10,000× bet** per round (base spin plus any bonus it triggers). The round ends as soon as it's reached |
+| Max win | **5,000× bet** per round (base spin plus any bonus it triggers). The round ends as soon as it's reached |
 
 ---
 
@@ -65,9 +65,10 @@ Two reasons matter to a studio:
 | L4 | **Champeen Medal** | Chipped "#1" star medal on a ribbon | All reels |
 | L5 | **Burned Disc** | Cracked CD-R with "MOVES 2" in marker | All reels |
 | W | **Glitch Wild** | A corrupted, pixel-tearing tile. Substitutes for every paying symbol | Reels 2–5 |
-| OW | **Override Wild** | The cross wild (section 4). **Dropped onto the grid by the game, not on the reel strips** | Reels 2–4 |
-| S | **Capture Core** | A glowing hexagonal containment device. Triggers the bonuses | All reels, max 1 per reel |
-| X | **Static** | A burnt-out screen tile. Pays nothing | Street Hunt reels only |
+| OW | **Override Wild** | Wild cross or column (section 4). **Dropped onto the grid by the game, not on the reel strips** | Reels 2–4 |
+| S | **Capture Core** | A glowing hexagonal containment device. Triggers the bonus | All reels, max 1 per reel |
+| R | **Reactor** | A pulsing power cell. Collect 3 in the bonus to level up | Bonus reels 1–4 |
+| X | **Static** | A glitching TV. Mystery symbol: all Statics reveal the same random symbol each spin | All reels |
 
 ### Paytable (pays per way, × total bet)
 
@@ -84,197 +85,151 @@ Glitch Wild and Override Wild don't pay on their own. They substitute only.
 
 ### Reel strips
 
-Paying symbols sit in stacks of 1–3. Glitch Wilds and the one Capture Core per reel go between
-stacks, so they never split one. There are four reel sets: base, Street Hunt, Night Raid and Legendary.
+Paying symbols and Static sit in stacks. Glitch Wilds, the one Capture Core per reel and (in the
+bonus) Reactors go between stacks, so they never split one. There are two reel sets: base (71–72
+stops per reel) and bonus (78–79 stops per reel, Reactors on reels 1–4, Static stacks on every reel).
 
-| Reel set | Lengths (reels 1–5) | Glitch Wilds per reel (reels 2–5) | Static |
-|---|---|---|---|
-| Base | 67, 68, 68, 68, 68 | 1 | – |
-| Street Hunt | 79, 80, 80, 80, 80 | 1 | 12 per reel |
-| Night Raid / Legendary | 67, 69, 69, 69, 69 | 2 | – |
+### Static reveal weights
 
----
+| Reel set | H1 | H2 | H3 | H4 | each low | Glitch Wild |
+|---|---|---|---|---|---|---|
+| Base | 3 | 4 | 5 | 6 | 9–11 | 1 |
+| Bonus | 5 | 6 | 7 | 8 | 7 | 3 |
 
-## 4. Signature mechanic: the Override Wild (cross wild)
-
-When an Override Wild lands, **its entire row and its entire column turn wild**. That's 9 wild cells
-in a cross centred where it landed.
-
-```
-Override Wild lands on reel 3, row 2:
-
-  . . W . .
-  W W O W W      O = Override Wild, W = new wild cells
-  . . W . .
-  . . W . .
-  . . W . .
-```
-
-Rules:
-
-- On each spin, a weighted draw decides whether an Override Wild drops. If it does, it lands on a
-  random cell of reels 2–4: 15 cells, all equally likely. In a bonus it never lands on a sticky cell.
-- Capture Cores are counted **before** the cross expands.
-- The row puts a wild on **every reel**, including reel 1, so every symbol on screen connects.
-- The engine supports two drops on one spin (always on different reels). The current tuning never uses it.
-
-**Why a drop instead of a symbol on the strips:** The base game needs a cross only about once every
-900 spins. On a strip, a symbol shows on 5 of every N stops, so the strip would need about 4,500
-positions. A weighted draw can be tuned continuously, and it's independent of the reel stops, which
-keeps the exact base-game formula exact (section 7).
-
-**Why a cross instead of a fixed T:** A fixed T covers the same 9 cells every time. A cross centred
-on the landing cell takes 15 different shapes, so it feels random and is still easy to tune.
-
-**Why the per-way pays are small:** One cross, on any of reels 2–4, gives every symbol at least 5 ways
-of 5 of a kind, even with nothing else on screen. With this paytable that's at least
-5 × 4.85 = **24.25× bet**. On the base reels a cross averages **94.5×**.
+Every Static on screen reveals the **same** symbol, so a screen of Static stacks can turn into a
+wall of one beast. The reveal happens before wins are counted.
 
 ---
 
-## 5. Bonus games (3, 4 or 5 Capture Cores)
+## 4. Override Wild
 
-Each tier adds one thing on top of the tier below it.
+The Override Wild is dropped onto a random cell of reels 2–4 by a weighted draw, separate from the
+reel stops. That keeps the exact base-game formula exact (section 7) and lets the drop rate be tuned
+continuously.
 
-| | Tier 1: **Street Hunt** | Tier 2: **Night Raid** | Tier 3: **Legendary Capture** (hidden) |
+- **Base game:** a full **cross** (its row and column turn wild), about **1 in 1,488 spins**.
+- **Bonus levels 1–3:** a wild **column**. **Overload:** a full cross. It drops on 9.4% of free spins.
+- Capture Cores and Reactors are counted **before** the wilds land.
+- There is **no guaranteed drop**. v0.2 forced one on the last spin if none had landed. Players
+  noticed it always arrived at the end, so it was removed.
+
+**Beast capture (bonus only).** Every beast (H1–H4) the Override covers, including the cell it
+lands on, adds a random amount to that spin's multiplier, which starts at ×1. Captures **stack**:
+five beasts under one column can make a ×6–×11 spin.
+
+| Level | Capture values (weights) |
+|---|---|
+| Street Hunt | +1 (4), +2 (1) |
+| Night Raid | +1 (3), +2 (1) |
+| Lockdown | +1 (4), +2 (2), +3 (1) |
+| Overload | +1 (3), +2 (2), +3 (1) |
+
+---
+
+## 5. The bonus: four levels
+
+3, 4 or 5 Capture Cores start the bonus with **10 free spins** at level 1, 2 or 3. Every **3 Reactors**
+collected adds **+4 spins** and unlocks the next level. Each level keeps everything below it.
+
+| Level | Name | What it adds | Guaranteed minimum |
 |---|---|---|---|
-| Trigger | 3 Cores | 4 Cores | 5 Cores |
-| Free spins | 10 | 10 | 10 |
-| Override Wild | Drops on 7.1% of free spins | Drops on 3.0% of free spins | Same as Night Raid |
-| Guaranteed cross | **Yes**: if none has landed, one drops on the last spin | **Yes** | Starts with **1 sticky cross already placed** |
-| What sticks | Nothing | The Override Wild's **column** stays wild for the rest of the bonus | The **whole cross** stays wild |
-| Global multiplier | None | Starts at ×1. **+1 per Override Wild**, applied on the spin it lands | **+2 per Override Wild** |
-| Reels | Street Hunt reels (with Static) | Night Raid reels (2 wilds per reel) | Same as Night Raid |
-| Retrigger | 3+ Cores (not under sticky cells) → +4 spins | Same | Same |
-| Bonus buy | **100×** | **300×** | **Not buyable** |
+| 1 | **Street Hunt** | Override drops a wild column; beast captures | 20× |
+| 2 | **Night Raid** | Bigger capture values | 50× |
+| 3 | **Lockdown** | Override columns **lock** wild for the rest of the bonus | 120× |
+| 4 | **Overload** | Full **crosses**, and every Glitch Wild that lands **locks** | 250× |
 
-Sticky cells hide whatever lands under them: no Override Wild can drop there, and Cores under them
-don't count. Each Override Wild sits on its own reel, so Night Raid and Legendary can have at most
-three crosses.
+Locked cells hide whatever lands under them, so Reactors and Cores under them don't count.
+The minimum is checked at the end: if the bonus paid less than the floor for its starting level, it
+pays the floor instead. Max win is **5,000×** per round, and the round ends as soon as it's reached.
 
-"Hidden" means Legendary Capture isn't shown in the buy menu or the intro screen. It **must still be
-described in the game rules**, because regulated markets require every feature to be disclosed.
+| Buy | Price | Starts on |
+|---|---|---|
+| Bonus | 100× | Street Hunt |
+| Super Bonus | 230× | Night Raid |
+
+The 5-Core start (Lockdown) can't be bought. It must still be described in the game rules, because
+regulated markets require every feature to be disclosed.
 
 ---
 
 ## 6. Results
 
-Generated from [`reports/results.json`](../reports/results.json) by `sims/summarize.py`.
+Full tables and charts: **[par_sheet.md](par_sheet.md)** (generated by `sims/charts.py`).
 
-### Targets vs results
+| Metric | Result |
+|---|---|
+| RTP, base mode | **96.03% ± 0.04%** (exact base + simulated bonus); 96.03% ± 0.09% over 2×10⁹ full-game spins (z = −0.07) |
+| Bonus buy RTP | Bonus 96.22% ± 0.15%, Super Bonus 95.98% ± 0.12% |
+| Base game RTP (exact) | 65.38%, 68% of the total |
+| Hit frequency | 30.8% |
+| Bonus odds (3 / 4 / 5 Cores) | 1 in 342 / 1 in 9,140 / 1 in 610,574 (exact) |
+| Volatility (SD per spin) | 21.0× |
+| Max win 5,000× | 1 in 149,948 spins |
 
-| Metric | Target | Result |
-|---|---|---|
-| RTP, base mode | 96.00% | **95.997% ± 0.004%** (exact base + simulated bonuses); 95.984% ± 0.024% (10¹⁰-spin full-game check, z = -1.01) |
-| RTP, each bonus buy | 96.0–96.3% | Street Hunt 96.18% ± 0.01%, Night Raid 96.23% ± 0.03% |
-| Base game's share of RTP | 55–65% | 60.7% |
-| Hit frequency | about 25% | 29.3% exact (base wins); 29.6% counting bonus rounds |
-| Street Hunt trigger | about 1 in 250 | 1 in 291 (exact) |
-| Night Raid trigger | about 1 in 4,000 | 1 in 7,300 (exact) |
-| Legendary trigger | about 1 in 250,000 | 1 in 458,417 (exact) |
-| Override Wild in base game | – | 1 in 907 spins |
-| Volatility (SD per spin) | 12–20× | 12.5× |
-| Max win 10,000× | report | 1 in 1,778,410 spins (5,623 hits) |
+| Bonus from level 1 | Value |
+|---|---|
+| Mean / median payout | 96.2× / 20.3× |
+| 75th / 90th / 99th percentile | 56× / 149× / 1,458× |
+| Reaches Night Raid / Lockdown / Overload | 47.1% / 13.9% / 3.1% |
+| Average Override Wilds | 1.18 |
 
-### Where the RTP comes from
-
-| Source | RTP | Share of RTP |
-|---|---|---|
-| Base game, normal wins (exact) | 47.81% | 49.8% |
-| Base game, Override Wild spins (exact) | 10.42% | 10.9% |
-| Street Hunt | 33.10% | 34.5% |
-| Night Raid | 3.96% | 4.1% |
-| Legendary Capture | 0.71% | 0.7% |
-| **Total** | **95.997%** | 100% |
-
-### Bonus payouts
-
-| | Street Hunt | Night Raid | Legendary Capture |
-|---|---|---|---|
-| Price | 100× | 300× | not buyable |
-| Mean payout | 96.2× | 288.7× | 3,275× |
-| Median payout | 76.5× | 195.9× | 1,107× |
-| 10th–90th percentile | 53–165× | 133–401× | 880–10,000× |
-| Pays back at least the price | 32.2% | 19.6% | – |
-| Pays back under half the price | 5.5% | 23.5% | – |
-| Pays back under 10% of the price | 0.0% | 0.0% | – |
-| Average Override Wilds | 1.19 | 1.04 | 0.27 (+1 placed) |
-| Reaches 10,000× | not reached in 10⁸ rounds | 1 in 1,877 | 22.4% of bonuses |
-
-About 87% of 10,000× max wins come from Legendary Capture, and most of the rest from Night Raid. That's the intended shape: the hidden tier is where the top of the game lives.
+**Volatility note.** The brief asked for medium volatility (SD roughly 8–12×). This design lands
+at 21×: the level ladder and stacking captures put a lot of value in rare deep runs, and the median
+bonus sits on its 20× floor. Getting to medium would mean flatter captures, a higher floor and a
+cheaper path to Overload, which trades away the "reach the end" payoff. That is the main open decision.
 
 ---
 
 ## 7. How RTP is verified
 
-The total RTP is split into parts, and each part is measured the most precise way available:
-
 ```
-RTP = base-game wins + Σ over tiers of  P(tier triggers) × E[tier payout]
+RTP = base-game wins + Σ over start levels  P(k Cores) × E[bonus payout from that level]
 ```
 
-1. **Base-game wins: exact, by formula.** Reel stops are independent of each other and of the Override
-   Wild drop. Fix which reels have a cross and which rows are wild, and each reel's count of
-   "this symbol or a wild" cells depends only on that reel's own stop. So for each symbol and run
-   length L:
+1. **Base-game wins: exact, by formula.** Reel stops are independent of each other, of the Static
+   reveal and of the Override drop. Fix the revealed symbol and where the Override lands, and each
+   reel's count of "this symbol or a wild" cells depends only on that reel's stop. So:
 
    ```
    E[win] = pay × E[c₁] × … × E[c_L] × P(c_{L+1} = 0)
    ```
 
-   Averaging over the 16 Override configurations (none, or one of 15 cells) gives the exact base RTP
-   in milliseconds.
-2. **Brute-force check.** Every one of the 1.43 billion stop combinations on the base reels
-   (the "full cycle") is enumerated with Numba in about a second. It matches the formula to ten
-   decimal places. The unit tests also check both against direct grid-by-grid scoring on small reels.
-3. **Trigger odds: exact.** At most one Core per reel, so P(k Cores) is a Poisson-binomial over the
-   five reels' Core probabilities.
-4. **Bonus payouts: Monte Carlo.** Each tier is simulated on its own for 10⁸ rounds, giving its mean
-   payout with a 95% confidence interval.
-5. **Whole-game simulation as an independent check.** 10¹⁰ complete rounds (about 3 minutes on a
-   12-core desktop), played exactly as a player would. It agrees with the sum of the parts:
-   z = −1.01, well inside the 95% band of ±1.96.
-
-The RTP from the parts (±0.004%) is about 6× tighter than even the 10-billion-spin simulation
-(±0.024%), because the base game, 61% of the RTP, carries no sampling error.
-
-Simplification: the formula applies the 10,000× cap to each bonus on its own rather than to the
-base spin and bonus combined. The billion-spin simulation applies the cap exactly, and the two agree.
+   Averaging over reveals and the 16 Override configurations gives the exact base RTP in milliseconds.
+2. **Brute-force check.** For a reveal, all 1.91 billion stop combinations of the base reels are
+   enumerated with Numba. They match the formula to ten decimal places.
+3. **Trigger odds: exact.** There's at most one Core per reel, so P(k Cores) is a Poisson-binomial.
+4. **Bonus payouts: Monte Carlo**, 2×10⁷ rounds per start level, with 95% confidence intervals.
+5. **Whole-game simulation as an independent check.** 2×10⁹ complete rounds, played exactly as a
+   player would. It agrees with the sum of the parts (z = −0.07).
+6. **The browser engine** (`web/engine.js`) is checked against Python on exported test grids and by
+   its own Monte Carlo on the [self-test page](https://infernokik.github.io/bootleg-beasts/selftest.html).
 
 ---
 
 ## 8. Design iteration log
 
-**v0.1 → v0.2: the bonus buys were lottery tickets.**
-The first version had Street Hunt (crosses plus a growing multiplier) and Night Raid (fully sticky
-crosses), with no guarantees. Tuned to 96%, the simulation showed:
+**v0.1 → v0.2: the bonus buys were lottery tickets.** With no guarantees, 67% of Street Hunt buys
+got no cross and the median was 7.8×. Fixed with a guaranteed cross, column-only sticking in Night
+Raid and Static on the Street Hunt reels.
 
-| Buy | Average | Median | Bonuses with no cross | Pays back <10% of price |
-|---|---|---|---|---|
-| Street Hunt (100×) | 96× | 7.8× | 67% | 55% |
-| Night Raid (300×) | 289× | 4.9× | 84% | 82% |
+**v0.2 → v0.3: play-test feedback.**
 
-The cause: one cross is worth about as much as the whole Street Hunt price. A sticky full cross pays
-at least ~48× on *every* remaining spin. So the drop rates had to be tiny, and most buys got nothing.
+1. *"The bonus is boring."* Three separate tiers became one bonus with a **Reactor level-up ladder**
+   (collect 3 → +4 spins and a new feature), in the style of collect-to-upgrade bonuses.
+2. *"The Override always drops on the last spin."* The guarantee was removed. A minimum bonus win
+   protects the player instead, without a predictable pattern.
+3. *"The multiplier feels wonky."* The flat global multiplier was replaced by **beast captures**:
+   the multiplier comes from the beasts the Override hits, so you can see why it's big.
+4. *"I can't tell which symbols are good."* Rarity frames (gold / purple / blue / green) on beasts,
+   dimmed lows, and glowing specials. Static became a mystery symbol in every mode.
 
-The fixes, each tested in simulation before being adopted:
-
-1. **Guaranteed cross** in both buyable tiers.
-2. **Night Raid sticks the column only.** Fully sticky crosses moved to the rare, unbuyable Legendary.
-3. **Street Hunt has no multiplier.** With one, the guaranteed cross alone paid ~130–210×, more than
-   the price. Letting the multiplier rise *after* the landing spin paid worked too, but mixed timing
-   between tiers would confuse players.
-4. **Static on the Street Hunt reels.** This lowers a cross's value there (94× → 79×), so crosses
-   can drop more often.
-
-Static made Night Raid *worse* (median 196× → 150×), so Night Raid keeps the regular bonus reels.
+Tried and dropped along the way: flat level multipliers (lottery-like, median under 10×) and crosses
+on every level (one cross alone paid more than the buy price).
 
 ---
 
 ## 9. Decisions still open
 
-1. **Name and art direction.** *Bootleg Beasts* is a placeholder.
-2. **Night Raid price.** 300× works (median about 196×). A 400–500× version with a stronger feature
-   is possible.
-3. **Optional extras for later:** an ante bet (higher bet for more frequent bonuses), and Glitch Wilds
-   that carry multipliers in the bonuses.
+1. **Volatility.** Medium would need flatter captures and a higher floor (section 6).
+2. **Reactor art** is procedural (`art/make_reactor.py`). It can be swapped for Gemini art.
+3. **Optional extras:** an ante bet, and a Lockdown buy at a higher price.

@@ -24,7 +24,7 @@ SRC = ROOT / "art" / "gemini"
 OUT = ROOT / "web" / "assets" / "symbols"
 
 # Source file stem prefix -> symbol code used by the game
-CODES = ["H1", "H2", "H3", "H4", "L1", "L2", "L3", "L4", "L5", "W", "OW", "S", "X"]
+CODES = ["H1", "H2", "H3", "H4", "L1", "L2", "L3", "L4", "L5", "W", "OW", "S", "X", "R"]
 # Colours every symbol must be able to use: the tile background navy, outline black, white.
 FIXED = [(11, 13, 30), (6, 6, 12), (245, 245, 250)]
 

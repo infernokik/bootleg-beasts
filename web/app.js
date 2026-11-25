@@ -1,9 +1,10 @@
 // Bootleg Beasts: browser UI. Every outcome comes from engine.js, which uses the same reel strips,
 // weights and rules as the verified Python model (game-data.json).
-import { Game, WILD, OVERRIDE, CORE } from "./engine.js";
-import { symbolHTML } from "./symbols.js";
-import { Fx, shake, glitchHit } from "./fx.js";
-import { startBackground } from "./background.js";
+import { Game, CORE, REACTOR } from "./engine.js?v=6";
+import { symbolHTML } from "./symbols.js?v=6";
+import { Fx, shake, glitchHit } from "./fx.js?v=6";
+import { startBackground } from "./background.js?v=6";
+import { sfx, isMuted, setMuted } from "./sfx.js?v=6";
 
 try {
   startBackground(document.getElementById("bg"));
@@ -11,7 +12,7 @@ try {
   console.warn("background disabled:", err); // decoration only: never block the game
 }
 
-const data = await (await fetch("game-data.json")).json();
+const data = await (await fetch("game-data.json", { cache: "no-cache" })).json();
 const game = new Game(data);
 const CODES = data.symbols.map((s) => s.code);
 const NAMES = data.symbols.map((s) => s.name);
@@ -20,22 +21,25 @@ const K = data.rows;
 const BETS = [0.2, 0.5, 1, 2, 5, 10, 20];
 const START_BALANCE = 1000;
 const BIG_WIN = 25; // x bet
-const FEATURE_TEXT = {
-  street_hunt: "10 free spins · Override Wilds drop more often · one guaranteed",
-  night_raid: "10 free spins · Override columns lock wild · multiplier +1 each",
-  legendary: "10 free spins · starts with a locked cross · crosses lock · multiplier +2 each",
-};
+const LEVEL_TEXT = [
+  "Override Wilds turn their column wild · captured beasts add +1–2×",
+  "Captures hit harder · more +2× beasts",
+  "Override columns LOCK wild for the rest of the bonus · captures up to +3×",
+  "Full Override CROSSES · Glitch Wilds lock · captures up to +3×",
+];
 
 // ---- State & helpers -----------------------------------------------------------
 const $ = (id) => document.getElementById(id);
 const ui = {
-  grid: $("grid"), wrap: document.querySelector(".grid-wrap"), ovl: $("ovl"), banner: $("banner"), bannerTitle: $("bannerTitle"), bannerSub: $("bannerSub"),
-  ticker: $("ticker"), balance: $("balance"), win: $("win"), bet: $("bet"), spin: $("spinBtn"),
-  betUp: $("betUp"), betDown: $("betDown"), buys: [$("buy0"), $("buy1")],
-  buyCosts: [$("buyCost0"), $("buyCost1")], turbo: $("turbo"), auto: $("auto"), refill: $("refill"),
-  hud: $("hud"), hudName: $("hudName"), hudSpins: $("hudSpins"), hudMult: $("hudMult"),
-  hudTotal: $("hudTotal"), info: $("info"), infoBody: $("infoBody"), infoBtn: $("infoBtn"),
-  sSpins: $("sSpins"), sBet: $("sBet"), sWon: $("sWon"), sRtp: $("sRtp"), repoLink: $("repoLink"),
+  grid: $("grid"), wrap: document.querySelector(".grid-wrap"), ovl: $("ovl"), banner: $("banner"),
+  bannerTitle: $("bannerTitle"), bannerSub: $("bannerSub"), winTag: $("winTag"), ticker: $("ticker"),
+  balance: $("balance"), win: $("win"), bet: $("bet"), spin: $("spinBtn"), betUp: $("betUp"),
+  betDown: $("betDown"), buys: [$("buy0"), $("buy1")], buyCosts: [$("buyCost0"), $("buyCost1")],
+  buyNames: [$("buyName0"), $("buyName1")], turbo: $("turbo"), auto: $("auto"), refill: $("refill"),
+  hud: $("hud"), hudLevel: $("hudLevel"), hudLvlNum: $("hudLvlNum"), pips: [...document.querySelectorAll(".pip")],
+  hudSpins: $("hudSpins"), hudMult: $("hudMult"), hudTotal: $("hudTotal"), info: $("info"),
+  infoBody: $("infoBody"), infoBtn: $("infoBtn"), mute: $("muteBtn"), sSpins: $("sSpins"),
+  sBet: $("sBet"), sWon: $("sWon"), sRtp: $("sRtp"), repoLink: $("repoLink"),
 };
 const store = {
   get(k, d) {
@@ -72,8 +76,8 @@ const bump = (el) => {
 
 // ---- Reels & overlay -----------------------------------------------------------------
 // Each reel is a window onto a strip of cells that scrolls during a spin. The overlay grid above
-// the reels holds everything that must not scroll: Override Wilds, wild crosses, locked wilds and
-// win frames.
+// the reels holds everything that must not scroll: Override Wilds, wild columns and crosses,
+// locked wilds, captures and win frames.
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const fx = new Fx(ui.wrap);
 const reels = [];
@@ -97,13 +101,17 @@ for (let k = 0; k < K; k++) {
   }
 }
 
+function paintCell(c, sym) {
+  c.dataset.sym = CODES[sym];
+  c.setAttribute("aria-label", NAMES[sym]);
+  c.innerHTML = symbolHTML(CODES[sym]);
+}
+
 function makeCell(sym) {
   const c = document.createElement("div");
   c.className = "cell";
   c.setAttribute("role", "img");
-  c.dataset.sym = CODES[sym];
-  c.setAttribute("aria-label", NAMES[sym]);
-  c.innerHTML = symbolHTML(CODES[sym]);
+  paintCell(c, sym);
   return c;
 }
 
@@ -120,10 +128,11 @@ function cellPitch() {
 
 function clearFx(keepSticky = false) {
   ui.grid.classList.remove("has-win");
-  for (const col of cells) for (const c of col) c.classList.remove("win", "land");
+  ui.winTag.hidden = true;
+  for (const col of cells) for (const c of col) c.classList.remove("win", "land", "focus");
   for (const col of ocells) {
     for (const o of col) {
-      o.classList.remove("win", "wildcell", "ow-drop", "core-hit", "lock-in");
+      o.classList.remove("win", "wildcell", "ow-drop", "core-hit", "lock-in", "captured", "reactor-hit", "focus");
       o.style.removeProperty("--d");
       if (!keepSticky) o.classList.remove("sticky", "ow-origin");
       if (!o.classList.contains("sticky")) o.replaceChildren();
@@ -132,6 +141,7 @@ function clearFx(keepSticky = false) {
 }
 
 function renderSticky(sticky, origins, animate) {
+  let n = 0;
   for (let r = 0; r < R; r++) {
     for (let k = 0; k < K; k++) {
       if (!sticky[r][k]) continue;
@@ -142,17 +152,19 @@ function renderSticky(sticky, origins, animate) {
         o.classList.add("sticky");
         o.classList.toggle("ow-origin", origin);
         if (animate) {
-          o.style.setProperty("--d", `${(r + k) * 40 * speed()}ms`);
+          o.style.setProperty("--d", `${n++ * 45 * speed()}ms`);
           o.classList.add("lock-in");
         }
       }
     }
   }
+  if (n) sfx.lock();
 }
 
-/** Spin all reels to `grid`. Reels stop left to right; once two Capture Cores are showing, each
- *  remaining reel slows down and glows (the bonus tease). */
+/** Spin all reels to `grid`. Reels stop left to right; in the base game, once two Capture Cores are
+ *  showing, each remaining reel slows down and glows (the bonus tease). */
 async function spinReels(key, grid, stops, sticky) {
+  sfx.spin();
   const pitch = cellPitch();
   const base = 560 * speed();
   const stagger = 170 * speed();
@@ -162,11 +174,11 @@ async function spinReels(key, grid, stops, sticky) {
   const jobs = [];
   for (let r = 0; r < R; r++) {
     const locked = !!sticky && sticky[r].every(Boolean);
-    const teasing = !locked && cores >= 2;
+    const teasing = !sticky && !locked && cores >= 2;
     const stopAt = teasing ? prev + tease : Math.max(base + r * stagger, prev + stagger);
     jobs.push(spinReel(r, key, grid[r], stops[r], { stopAt, teasing, teaseFrom: prev, locked }, pitch, sticky));
     prev = stopAt;
-    for (let k = 0; k < K; k++) if (grid[r][k] === CORE && !(sticky && sticky[r][k])) cores++;
+    for (let k = 0; k < K; k++) if (grid[r][k] === CORE) cores++;
   }
   await Promise.all(jobs);
 }
@@ -185,7 +197,12 @@ function spinReel(r, key, col, stop, plan, pitch, sticky) {
   strip.prepend(...finals, ...fillers);
   const dist = (5 + fillerCount) * pitch;
   el.classList.add("spinning");
-  if (plan.teasing) setTimeout(() => el.classList.add("tease"), plan.teaseFrom);
+  if (plan.teasing) {
+    setTimeout(() => {
+      el.classList.add("tease");
+      sfx.tease();
+    }, plan.teaseFrom);
+  }
   setTimeout(() => el.classList.remove("spinning"), plan.stopAt * 0.86);
   const anim = strip.animate(
     [
@@ -199,45 +216,100 @@ function spinReel(r, key, col, stop, plan, pitch, sticky) {
     while (strip.children.length > 5) strip.lastElementChild.remove();
     cells[r] = finals;
     el.classList.remove("tease");
+    sfx.reelStop(r);
     for (let k = 0; k < K; k++) {
       finals[k].classList.add("land");
-      if (col[k] === CORE && !(sticky && sticky[r][k])) {
+      if ((col[k] === CORE || col[k] === REACTOR) && !(sticky && sticky[r][k])) {
+        if (col[k] === CORE) sfx.core();
         const [x, y] = fx.at(ocells[r][k]);
-        fx.burst(x, y, { n: 18, colors: ["#ffc531", "#fff1a8", "#ff8a3d"], speed: 3.5, size: 3, life: 35 });
+        const colors = col[k] === CORE ? ["#ffc531", "#fff1a8", "#ff8a3d"] : ["#78ff78", "#e6ffc8", "#28c85a"];
+        fx.burst(x, y, { n: 18, colors, speed: 3.5, size: 3, life: 35 });
       }
     }
   });
 }
 
-async function showOverrides(drops, sticky) {
+/** Every Static on screen glitches, then flips to the revealed symbol. */
+async function showReveal(reveal) {
+  if (!reveal.cells.length) return;
+  sfx.reveal();
+  for (const [r, k] of reveal.cells) cells[r][k].classList.add("glitching");
+  await sleep(380);
+  for (const [r, k] of reveal.cells) {
+    const c = cells[r][k];
+    c.classList.remove("glitching");
+    paintCell(c, reveal.sym);
+    c.classList.remove("land");
+    void c.offsetWidth;
+    c.classList.add("land");
+    const [x, y] = fx.at(ocells[r][k]);
+    fx.burst(x, y, { n: 10, colors: ["#21f0ff", "#ff2bd6", "#fff"], speed: 3, size: 3, life: 30 });
+  }
+  tick(`<b>Static revealed ${NAMES[reveal.sym]}!</b> (${reveal.cells.length} symbol${reveal.cells.length > 1 ? "s" : ""})`);
+  await sleep(450);
+}
+
+/** Override Wilds land; their column (shape 1) or cross (shape 2) turns wild. */
+async function showDrops(drops, shape, sticky) {
   for (const [r, k] of drops) {
     const o = ocells[r][k];
     o.innerHTML = symbolHTML("OW");
     o.classList.add("ow-drop");
-    tick(`<b>Override Wild</b> on reel ${r + 1}: its whole row and column turn wild.`);
-    await sleep(300);
+    tick(`<b>Override Wild</b> on reel ${r + 1}: its ${shape === 2 ? "whole row and column" : "column"} turns wild.`);
+    await sleep(280);
+    sfx.override();
     const [x, y] = fx.at(o);
     fx.burst(x, y, { n: 50, speed: 7.5, size: 5, life: 50 });
     shake(ui.wrap, 9, 420);
-    fx.beam(o, ui.grid, false);
     fx.beam(o, ui.grid, true);
+    if (shape === 2) fx.beam(o, ui.grid, false);
     for (let rr = 0; rr < R; rr++) {
       for (let kk = 0; kk < K; kk++) {
-        if ((rr === r) === (kk === k)) continue; // only the cross, not the origin
+        const inShape = rr === r || (shape === 2 && kk === k);
+        if (!inShape || (rr === r && kk === k)) continue;
         if (sticky && sticky[rr][kk]) continue;
         const cell = ocells[rr][kk];
         cell.style.setProperty("--d", `${(Math.abs(rr - r) + Math.abs(kk - k)) * 55 * speed()}ms`);
         cell.classList.add("wildcell");
       }
     }
-    await sleep(640);
+    await sleep(600);
   }
 }
 
-function coreHit(grid, sticky) {
+/** Captured beasts pop their multiplier one by one; the spin multiplier counts up. */
+async function showCaptures(captures) {
+  let mult = 1;
+  for (let i = 0; i < captures.length; i++) {
+    const c = captures[i];
+    mult += c.value;
+    const o = ocells[c.r][c.k];
+    o.classList.add("captured");
+    const [x, y] = fx.at(o);
+    fx.burst(x, y, { n: 26, colors: ["#ffc531", "#fff1a8", "#ff2bd6"], speed: 5, size: 4, life: 40 });
+    pop(`+${c.value}×`, x, y);
+    sfx.capture(i);
+    ui.hudMult.textContent = `×${mult}`;
+    bump(ui.hudMult);
+    tick(`<b>Captured ${NAMES[c.sym]}!</b> +${c.value}× → spin multiplier <b>×${mult}</b>`);
+    await sleep(380);
+  }
+}
+
+function pop(text, x, y, cls = "") {
+  const el = document.createElement("div");
+  el.className = `cap-pop ${cls}`;
+  el.textContent = text;
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+  ui.wrap.appendChild(el);
+  setTimeout(() => el.remove(), 1200);
+}
+
+function coreHit(grid) {
   for (let r = 0; r < R; r++) {
     for (let k = 0; k < K; k++) {
-      if (grid[r][k] !== CORE || (sticky && sticky[r][k])) continue;
+      if (grid[r][k] !== CORE) continue;
       ocells[r][k].classList.add("core-hit");
       const [x, y] = fx.at(ocells[r][k]);
       fx.burst(x, y, { n: 30, colors: ["#ffc531", "#fff1a8", "#ff8a3d", "#fff"], speed: 5.5, size: 4 });
@@ -250,14 +322,10 @@ function tick(html) {
   ui.ticker.innerHTML = html;
 }
 
-function linesText(lines, mult, b) {
-  const parts = lines.slice(0, 3).map((l) => {
-    const ways = `${l.ways.toLocaleString()} way${l.ways > 1 ? "s" : ""}`;
-    const m = mult > 1 ? ` × ${mult}` : "";
-    return `<b>${NAMES[l.sym]}</b> ${l.length} of a kind · ${ways}${m} = <span class="amt">${fmt(l.win * mult * b)}</span>`;
-  });
-  if (lines.length > 3) parts.push(`+${lines.length - 3} more`);
-  return parts.join(" &nbsp;|&nbsp; ");
+function lineText(l, mult, b) {
+  const ways = `${l.ways.toLocaleString()} way${l.ways > 1 ? "s" : ""}`;
+  const m = mult > 1 ? ` × ${mult}` : "";
+  return `<b>${NAMES[l.sym]}</b> ${l.length} of a kind · ${ways}${m} = <span class="amt">${fmt(l.win * mult * b)}</span>`;
 }
 
 async function banner(title, sub, ms, cls = "") {
@@ -275,10 +343,15 @@ async function countBanner(title, amount, ms, cls = "") {
   ui.banner.hidden = false;
   const dur = ms * 0.6 * speed();
   const t0 = performance.now();
+  let lastCoin = 0;
   await new Promise((res) => {
     const f = (now) => {
       const p = Math.min(1, (now - t0) / dur);
       ui.bannerSub.textContent = fmt(amount * (1 - (1 - p) ** 3));
+      if (now - lastCoin > 70 && p < 1) {
+        sfx.coin();
+        lastCoin = now;
+      }
       if (p < 1) requestAnimationFrame(f);
       else res();
     };
@@ -300,8 +373,9 @@ function credit(amount) {
 function render() {
   ui.balance.textContent = fmt(S.balance);
   ui.bet.textContent = fmt(bet());
-  data.tiers.forEach((t, i) => {
-    if (t.buyPrice && ui.buyCosts[i]) ui.buyCosts[i].textContent = fmt(t.buyPrice * bet());
+  data.buys.forEach((b, i) => {
+    ui.buyNames[i].textContent = `Buy ${b.name}`;
+    ui.buyCosts[i].textContent = fmt(b.price * bet());
   });
   ui.sSpins.textContent = S.spins.toLocaleString();
   ui.sBet.textContent = fmt(S.wagered);
@@ -312,11 +386,12 @@ function render() {
   ui.spin.disabled = S.busy || !canSpin;
   ui.betUp.disabled = S.busy || S.betIdx >= BETS.length - 1;
   ui.betDown.disabled = S.busy || S.betIdx <= 0;
-  ui.buys.forEach((b, i) => (b.disabled = S.busy || S.balance < data.tiers[i].buyPrice * bet() - 1e-9));
+  ui.buys.forEach((el, i) => (el.disabled = S.busy || S.balance < data.buys[i].price * bet() - 1e-9));
   store.set("balance", S.balance);
   store.set("betIdx", S.betIdx);
 }
 
+/** Show every winning cell, then (if there's more than one win) walk through each win in turn. */
 async function showWins(lines, mult, winX, b) {
   ui.grid.classList.add("has-win");
   const hit = new Set();
@@ -327,87 +402,143 @@ async function showWins(lines, mult, winX, b) {
       hit.add(r * K + k);
     }
   }
+  sfx.win(winX);
   const per = Math.max(2, Math.min(9, Math.round(150 / hit.size)));
   for (const id of hit) {
     const [x, y] = fx.at(ocells[Math.floor(id / K)][id % K]);
     fx.burst(x, y, { n: per, colors: ["#b6ff3b", "#fff1a8", "#ffc531"], speed: 3.2, size: 3, life: 38, gravity: 0.1 });
   }
-  tick(linesText(lines, mult, b));
+  tick(lines.slice(0, 2).map((l) => lineText(l, mult, b)).join(" &nbsp;|&nbsp; ") +
+    (lines.length > 2 ? ` &nbsp;+${lines.length - 2} more` : ""));
+  await sleep(650);
+  if (lines.length > 1 && !ui.auto.checked) {
+    for (const l of lines.slice(0, 4)) {
+      const on = new Set(l.cells.map(([r, k]) => r * K + k));
+      for (let r = 0; r < R; r++) {
+        for (let k = 0; k < K; k++) {
+          const yes = on.has(r * K + k);
+          cells[r][k].classList.toggle("win", yes);
+          ocells[r][k].classList.toggle("win", yes);
+        }
+      }
+      const [r0, k0] = l.cells[0];
+      const [x, y] = fx.at(ocells[r0][k0]);
+      ui.winTag.innerHTML = `${NAMES[l.sym]} ×${l.length} <span>${fmt(l.win * mult * b)}</span>`;
+      ui.winTag.style.left = `${x}px`;
+      ui.winTag.style.top = `${y}px`;
+      ui.winTag.hidden = false;
+      tick(lineText(l, mult, b));
+      sfx.coin();
+      await sleep(620);
+    }
+    ui.winTag.hidden = true;
+  }
   if (winX >= BIG_WIN) {
-    await sleep(700);
     shake(ui.wrap, winX >= 100 ? 12 : 8, 500);
     fx.fountain(winX >= 250 ? 220 : winX >= 100 ? 150 : 90);
+    sfx.bigWin();
     const title = winX >= 250 ? "EPIC WIN" : winX >= 100 ? "MEGA WIN" : "BIG WIN";
     await countBanner(title, round2(winX * b), 2400, winX >= 100 ? "gold" : "");
   } else {
-    await sleep(950);
+    await sleep(300);
   }
 }
 
+// ---- Bonus HUD -----------------------------------------------------------------------
+function hudLevel(level) {
+  const lv = data.levels[level];
+  ui.hudLevel.textContent = lv.name;
+  ui.hudLvlNum.textContent = `LVL ${level + 1}`;
+  document.body.dataset.level = String(level);
+}
+
+function hudPips(n, top) {
+  ui.pips.forEach((p, i) => p.classList.toggle("on", top || i < n));
+}
+
 // ---- Game flow -------------------------------------------------------------------
-async function runBonus(tierIndex, cap) {
-  const st = game.startBonus(tierIndex, cap);
-  const t = st.tier;
+async function runBonus(startLevel, cap) {
+  const st = game.startBonus(startLevel, cap);
   const b = bet();
-  const origins = [...st.preplaced];
-  document.body.classList.add("in-bonus", `tier-${t.key}`);
+  const origins = [];
+  let meterShown = 0;
+  document.body.classList.add("in-bonus");
   ui.hud.hidden = false;
-  ui.hudName.textContent = t.name;
-  const hud = () => {
-    ui.hudSpins.textContent = st.spinsLeft;
-    ui.hudMult.textContent = t.multStep ? `×${st.mult}` : "none";
-    ui.hudTotal.textContent = fmt(round2(st.total * b));
-  };
-  hud();
+  hudLevel(startLevel);
+  hudPips(0, false);
+  ui.hudSpins.textContent = st.spinsLeft;
+  ui.hudMult.textContent = "×1";
+  ui.hudTotal.textContent = fmt(0);
+  sfx.bonus();
   await glitchHit(600);
-  await banner(t.name.toUpperCase(), FEATURE_TEXT[t.key], 2300, t.key === "legendary" ? "gold" : "");
+  await banner(data.levels[startLevel].name.toUpperCase(),
+    `${data.freeSpins} free spins · ${LEVEL_TEXT[startLevel]}<br>Collect 3 Reactors to level up`, 2600,
+    startLevel >= 2 ? "gold" : "");
   clearFx();
-  if (origins.length) {
-    await showOverrides(origins, null);
-    clearFx(true);
-    renderSticky(st.sticky, origins, true);
-    tick(`<b>${t.name}</b> starts with a locked Override cross.`);
-    await sleep(900);
-  }
   while (!st.done) {
     clearFx(true);
     const res = game.bonusSpin(st);
-    hud();
-    await spinReels(t.key, res.grid, res.stops, res.stickyBefore);
-    if (res.drops.length) {
-      if (res.guaranteed) {
-        tick("<b>Last spin:</b> guaranteed Override Wild!");
-        await sleep(650);
+    ui.hudSpins.textContent = st.spinsLeft - res.levelUps * data.levelUpSpins + (st.done ? 0 : 0);
+    ui.hudMult.textContent = "×1";
+    await spinReels("bonus", res.landed, res.stops, res.stickyBefore);
+
+    // Reactors fill the meter
+    const top = res.levelBefore >= data.levels.length - 1;
+    for (let i = 0; i < res.reactorCells.length; i++) {
+      const [r, k] = res.reactorCells[i];
+      ocells[r][k].classList.add("reactor-hit");
+      if (!top) {
+        meterShown++;
+        hudPips(Math.min(meterShown, 3), false);
+        bump(ui.pips[Math.min(meterShown, 3) - 1]);
       }
-      await showOverrides(res.drops, res.stickyBefore);
-      if (t.multStep) {
-        ui.hudMult.textContent = `×${res.mult}`;
-        bump(ui.hudMult);
-      }
-      if (t.stickyMode) origins.push(...res.drops);
+      sfx.reactor(i);
+      await sleep(260);
     }
-    if (res.spinWin > 0) await showWins(res.lines, res.mult, res.spinWin, b);
+    await showReveal(res.reveal);
+    if (res.drops.length) {
+      await showDrops(res.drops, res.shape, res.stickyBefore);
+      if (res.captures.length) await showCaptures(res.captures);
+      if (data.levels[res.levelBefore].stickyCrosses) origins.push(...res.drops);
+    }
+    if (res.spinWin > 0) await showWins(res.lines, res.spinMult, res.spinWin, b);
     else {
       tick(`Free spin ${st.played}: no win.`);
       await sleep(380);
     }
-    hud();
-    if (t.stickyMode && res.drops.length) {
+    ui.hudTotal.textContent = fmt(round2(st.total * b)); // only after the win is shown
+    if (res.newSticky.length || (res.drops.length && data.levels[res.levelBefore].stickyCrosses)) {
       clearFx(true);
       renderSticky(st.sticky, origins, true);
-      tick(t.stickyMode === 1 ? "That column is now <b>locked wild</b> for the rest of the bonus." :
-        "That cross is now <b>locked wild</b> for the rest of the bonus.");
-      await sleep(700);
+      tick(res.newSticky.length ? "Glitch Wilds <b>locked</b> for the rest of the bonus." :
+        "Override column <b>locked wild</b> for the rest of the bonus.");
+      await sleep(650);
     }
-    if (res.retrig) {
-      coreHit(res.grid, res.stickyBefore);
-      await sleep(600);
-      await banner("+4 FREE SPINS", "3 Capture Cores landed", 1500);
+    // Level-ups
+    for (let u = 0; u < res.levelUps; u++) {
+      const lvl = res.levelBefore + u + 1;
+      meterShown = Math.max(0, meterShown - data.reactorsPerLevel);
+      hudPips(meterShown, false);
+      sfx.levelUp();
+      await glitchHit(500);
+      hudLevel(lvl);
+      ui.hudSpins.textContent = st.spinsLeft - (res.levelUps - u - 1) * data.levelUpSpins;
+      await banner(`LEVEL UP: ${data.levels[lvl].name.toUpperCase()}`,
+        `+${data.levelUpSpins} free spins<br>${LEVEL_TEXT[lvl]}`, 2400, lvl >= 2 ? "gold" : "");
     }
+    if (st.level >= data.levels.length - 1) hudPips(3, true);
+    ui.hudSpins.textContent = st.spinsLeft;
+  }
+  if (st.floored) {
+    tick(`Guaranteed minimum win: bonus topped up to <b>${fmt(round2(st.total * b))}</b>.`);
+    ui.hudTotal.textContent = fmt(round2(st.total * b));
+    await sleep(900);
   }
   const total = round2(st.total * b);
-  await countBanner(`${t.name} complete`, total, 2400, t.key === "legendary" ? "gold" : "");
-  document.body.classList.remove("in-bonus", `tier-${t.key}`);
+  sfx.bigWin();
+  await countBanner("BONUS COMPLETE", total, 2600, st.level >= 2 ? "gold" : "");
+  document.body.classList.remove("in-bonus");
+  delete document.body.dataset.level;
   ui.hud.hidden = true;
   clearFx();
   return st;
@@ -416,7 +547,8 @@ async function runBonus(tierIndex, cap) {
 async function maxWinBanner(b) {
   shake(ui.wrap, 14, 700);
   fx.fountain(300);
-  await banner("MAX WIN", `${fmt(round2(data.maxWin * b))} · 10,000× bet`, 3000, "gold");
+  sfx.bigWin();
+  await banner("MAX WIN", `${fmt(round2(data.maxWin * b))} · ${data.maxWin.toLocaleString()}× bet`, 3000, "gold");
 }
 
 async function spin() {
@@ -436,22 +568,24 @@ async function spin() {
   clearFx();
 
   const res = game.baseSpin();
-  await spinReels("base", res.grid, res.stops, null);
-  if (res.drops.length) await showOverrides(res.drops, null);
+  await spinReels("base", res.landed, res.stops, null);
+  await showReveal(res.reveal);
+  if (res.drops.length) await showDrops(res.drops, 2, null);
   let totalX = res.win;
   if (res.win > 0) {
     await showWins(res.lines, 1, res.win, b);
     credit(round2(res.win * b));
     setWin(round2(res.win * b));
     render();
-  } else if (res.tier < 0) {
-    tick(res.cores ? `${res.cores} Capture Core${res.cores > 1 ? "s" : ""}. Land 3 for a bonus.` : "No win.");
+  } else if (res.startLevel < 0) {
+    tick(res.cores ? `${res.cores} Capture Core${res.cores > 1 ? "s" : ""}. Land 3 for the bonus.` : "No win.");
   }
-  if (res.tier >= 0) {
-    coreHit(res.grid, null);
-    tick(`<b>${res.cores} Capture Cores!</b>`);
+  if (res.startLevel >= 0) {
+    coreHit(res.landed);
+    sfx.core();
+    tick(`<b>${res.cores} Capture Cores!</b> Bonus starts on level ${res.startLevel + 1}.`);
     await sleep(1400);
-    const st = await runBonus(res.tier, data.maxWin - res.win);
+    const st = await runBonus(res.startLevel, data.maxWin - res.win);
     totalX += st.total;
     credit(round2(st.total * b));
   }
@@ -466,10 +600,11 @@ async function spin() {
 }
 
 async function buyBonus(i) {
-  const t = data.tiers[i];
+  const buy = data.buys[i];
   const b = bet();
-  const cost = round2(t.buyPrice * b);
+  const cost = round2(buy.price * b);
   if (S.busy || S.balance < cost - 1e-9) return;
+  sfx.click();
   ui.auto.checked = false;
   S.busy = true;
   S.balance = round2(S.balance - cost);
@@ -477,13 +612,13 @@ async function buyBonus(i) {
   setWin(0);
   render();
   clearFx();
-  tick(`Bought <b>${t.name}</b> for ${fmt(cost)}.`);
-  const st = await runBonus(i, data.maxWin);
+  tick(`Bought the <b>${buy.name}</b> for ${fmt(cost)}.`);
+  const st = await runBonus(buy.startLevel, data.maxWin);
   const amount = round2(st.total * b);
   credit(amount);
   if (st.capped) await maxWinBanner(b);
   setWin(amount);
-  tick(`<b>${t.name}</b> paid <span class="amt">${fmt(amount)}</span> (${(st.total / t.buyPrice).toFixed(2)}× the price).`);
+  tick(`<b>${buy.name}</b> paid <span class="amt">${fmt(amount)}</span> (${(st.total / buy.price).toFixed(2)}× the price).`);
   S.busy = false;
   render();
 }
@@ -496,63 +631,62 @@ function pct(x, d = 2) {
 function buildInfo() {
   const b = bet();
   const s = data.stats || {};
-  const [sh, nr] = data.tiers;
   const rows = data.symbols.slice(0, 9).map((sym) =>
-    `<tr><td><span class="pt-sym">${symbolHTML(sym.code)}${sym.name}</span></td>` +
+    `<tr><td><span class="pt-sym" data-sym="${sym.code}">${symbolHTML(sym.code)}${sym.name}</span></td>` +
     data.paytable[sym.code].map((p) => `<td>${fmt(p * b)}</td>`).join("") + "</tr>").join("");
   const stat = (v, label) => `<div class="stat"><b>${v}</b><span>${label}</span></div>`;
+  const lv = data.levels;
   ui.infoBody.innerHTML = `
     <h2>Bootleg Beasts</h2>
     <p>5 reels × 5 rows, <b>3,125 ways</b>. Wins pay left to right for 3 or more matching symbols on
-    adjacent reels, starting from reel 1. Each win is the pay per way × the number of ways (on every
-    reel in the run, count the matching symbols plus wilds, then multiply).</p>
+    adjacent reels, starting from reel 1. Each win is the pay per way × the number of ways.</p>
     <h3>Verified math</h3>
     <div class="stat-grid">
-      ${stat(s.rtp ? pct(s.rtp, 3) : "96.00%", `RTP (± ${s.rtpCi95 ? pct(s.rtpCi95, 3) : "–"})`)}
+      ${stat(s.rtp ? pct(s.rtp, 2) : "96.00%", `RTP (± ${s.rtpCi95 ? pct(s.rtpCi95, 2) : "–"})`)}
       ${stat(s.hitRate ? pct(s.hitRate, 1) : "–", "Hit frequency")}
-      ${stat("10,000×", s.maxWinOdds ? `Max win · 1 in ${Math.round(s.maxWinOdds).toLocaleString()} spins` : "Max win")}
-      ${stat(s.buyRtp ? pct(s.buyRtp.street_hunt) : "–", `${sh.name} buy RTP`)}
-      ${stat(s.buyRtp ? pct(s.buyRtp.night_raid) : "–", `${nr.name} buy RTP`)}
-      ${stat(s.triggerOdds ? `1 in ${Math.round(s.triggerOdds[0])}` : "–", "Bonus frequency (3+ Cores)")}
+      ${stat(`${data.maxWin.toLocaleString()}×`, s.maxWinOdds ? `Max win · 1 in ${Math.round(s.maxWinOdds).toLocaleString()} spins` : "Max win")}
+      ${stat(s.triggerOdds ? `1 in ${Math.round(s.triggerOdds[0])}` : "–", "Bonus frequency")}
+      ${data.buys.map((bb) => stat(s.buyRtp ? pct(s.buyRtp[bb.key]) : "–", `${bb.name} (${bb.price}×) RTP`)).join("")}
     </div>
-    <p>The base game is calculated exactly. Each bonus is simulated 100 million times, and the whole
-    game 10 billion times as an independent check. This page plays the same reel strips and rules.
-    <a href="selftest.html">Run the engine self-test.</a></p>
+    <p>The base game is calculated exactly; the bonus is simulated tens of millions of times, and the
+    whole game a billion times as an independent check. <a href="selftest.html">Run the engine self-test.</a></p>
     <h3>Paytable (bet ${fmt(b)}, pays per way)</h3>
+    <p>Beast frames show value: <b class="t-gold">gold</b> &gt; <b class="t-purple">purple</b> &gt;
+    <b class="t-blue">blue</b> &gt; <b class="t-green">green</b> &gt; items.</p>
     <table><thead><tr><th>Symbol</th><th>3</th><th>4</th><th>5</th></tr></thead><tbody>${rows}</tbody></table>
-    <h3>Wilds</h3>
+    <h3>Base game features</h3>
     <ul>
+      <li><b>Static</b>: after every spin, all Static TVs on screen reveal the <b>same</b> random symbol (sometimes a Wild).</li>
       <li><b>Glitch Wild</b> (reels 2–5) substitutes for every paying symbol.</li>
-      <li><b>Override Wild</b> is dropped onto a random position on reels 2–4. Its <b>whole row and whole
-      column turn wild</b>. Capture Cores are counted before the cross expands.</li>
+      <li><b>Override Wild</b> drops onto reels 2–4; its whole row and column turn wild.</li>
+      <li><b>3, 4 or 5 Capture Cores</b> start the bonus on level 1, 2 or 3.</li>
     </ul>
-    <h3>Bonuses</h3>
-    <ul>
-      <li><b>3 Capture Cores: Street Hunt.</b> 10 free spins on special reels. Override Wilds drop more often,
-      and at least one is guaranteed (it drops on the last spin if none has landed).</li>
-      <li><b>4 Capture Cores: Night Raid.</b> 10 free spins. Each Override Wild raises the multiplier by 1,
-      including on the spin it lands, and its column stays wild for the rest of the bonus. At least one
-      Override Wild is guaranteed.</li>
-      <li><b>5 Capture Cores: Legendary Capture.</b> 10 free spins, starting with one locked Override cross.
-      Each Override Wild raises the multiplier by 2, and its whole cross stays wild. It can't be bought.</li>
-      <li>During any bonus, 3 or more Capture Cores award +4 free spins. Locked cells hide whatever lands
-      under them, so Cores there don't count and no new Override Wild can land there.</li>
-    </ul>
+    <h3>The bonus: level up by collecting Reactors</h3>
+    <p>${data.freeSpins} free spins. Every <b>${data.reactorsPerLevel} Reactors</b> collected = next level + ${data.levelUpSpins} spins.
+    When an Override Wild lands, every <b>beast</b> it covers is <b>captured</b> and adds a random amount to that
+    spin's multiplier; several captures stack.</p>
+    <ol>
+      ${lv.map((l, i) => `<li><b>${l.name}</b>: ${LEVEL_TEXT[i]}.</li>`).join("")}
+    </ol>
+    <p>Guaranteed minimum bonus win: ${data.minBonusWin.slice(0, 3).map((m, i) => `${m}× from level ${i + 1}`).join(", ")}.
+    Locked cells hide whatever lands under them.</p>
     <h3>Bonus buys and max win</h3>
-    <p>${sh.name} costs ${sh.buyPrice}× bet and ${nr.name} costs ${nr.buyPrice}× bet. The maximum win is
-    <b>10,000× bet</b> per round, including any bonus, and the round ends when it's reached.</p>
+    <p>${data.buys.map((bb) => `${bb.name}: ${bb.price}× bet (starts on level ${bb.startLevel + 1})`).join(" · ")}.
+    Maximum win <b>${data.maxWin.toLocaleString()}× bet</b> per round.</p>
     <p class="label">Free-play portfolio demo. Virtual credits have no cash value. Not a gambling product.</p>`;
 }
 
 // ---- Wiring ----------------------------------------------------------------------
 ui.spin.addEventListener("click", spin);
-ui.buys.forEach((b, i) => b.addEventListener("click", () => buyBonus(i)));
+ui.buys.forEach((el, i) => el.addEventListener("click", () => buyBonus(i)));
 ui.betUp.addEventListener("click", () => {
   S.betIdx = Math.min(S.betIdx + 1, BETS.length - 1);
+  sfx.click();
   render();
 });
 ui.betDown.addEventListener("click", () => {
   S.betIdx = Math.max(S.betIdx - 1, 0);
+  sfx.click();
   render();
 });
 ui.refill.addEventListener("click", () => {
@@ -567,6 +701,16 @@ ui.infoBtn.addEventListener("click", () => {
   buildInfo();
   ui.info.showModal();
 });
+const paintMute = () => {
+  ui.mute.textContent = isMuted() ? "🔇" : "🔊";
+  ui.mute.setAttribute("aria-label", isMuted() ? "Unmute sound" : "Mute sound");
+};
+ui.mute.addEventListener("click", () => {
+  setMuted(!isMuted());
+  paintMute();
+  sfx.click();
+});
+paintMute();
 document.addEventListener("keydown", (e) => {
   if (e.code !== "Space" || ui.info.open) return;
   e.preventDefault();
@@ -579,8 +723,9 @@ if (repo) {
   ui.repoLink.hidden = false;
 }
 
-// First screen: a random base-game window, no animation.
+// First screen: a random base-game window with the Static already revealed, no animation.
 const first = game.spinReels("base").grid;
+game.revealStatic(first, null, "base");
 for (let r = 0; r < R; r++) setColumn(r, first[r]);
 render();
 
@@ -589,12 +734,12 @@ if (new URLSearchParams(location.search).has("debug")) {
   const baseCum = game.cum.base;
   window.bb = {
     game,
-    /** Play a bonus tier for free (0 Street Hunt, 1 Night Raid, 2 Legendary). */
-    async bonus(i) {
+    /** Play the bonus for free from a starting level (0-3). */
+    async bonus(level = 0) {
       if (S.busy) return;
       S.busy = true;
       render();
-      const st = await runBonus(i, data.maxWin);
+      const st = await runBonus(level, data.maxWin);
       credit(round2(st.total * bet()));
       S.busy = false;
       render();

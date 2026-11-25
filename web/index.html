@@ -6,7 +6,7 @@
   <title>Bootleg Beasts: free-play slot demo</title>
   <meta name="description" content="A free-play 5x5 cross-wild slot demo with a math model verified to 96% RTP by exact calculation and 10 billion simulated spins.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpolygon points='32,4 56,18 56,46 32,60 8,46 8,18' fill='%231b1404' stroke='%23ffc531' stroke-width='4'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%23ffc531'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body data-repo="https://github.com/infernokik/bootleg-beasts">
   <canvas id="bg" aria-hidden="true"></canvas>
@@ -36,19 +36,24 @@
         <span class="badge">Free-play demo · no real money</span>
         <span class="badge badge-rtp">RTP 96.00%</span>
       </div>
+      <button id="muteBtn" class="icon-btn mute-btn" aria-label="Mute sound">🔊</button>
       <button id="infoBtn" class="icon-btn" aria-label="Rules, paytable and math">i</button>
     </header>
 
     <main class="stage">
       <div class="hud" id="hud" hidden>
-        <div class="hud-item hud-name"><span class="hud-label">Bonus</span><span id="hudName"></span></div>
+        <div class="hud-item hud-name">
+          <span class="hud-label"><span id="hudLvlNum">LVL 1</span> · Reactors <span class="pips"><i class="pip"></i><i class="pip"></i><i class="pip"></i></span></span>
+          <span id="hudLevel">Street Hunt</span>
+        </div>
         <div class="hud-item"><span class="hud-label">Spins left</span><span id="hudSpins"></span></div>
-        <div class="hud-item"><span class="hud-label">Multiplier</span><span id="hudMult">×1</span></div>
+        <div class="hud-item"><span class="hud-label">Spin multiplier</span><span id="hudMult">×1</span></div>
         <div class="hud-item"><span class="hud-label">Bonus win</span><span id="hudTotal">0.00</span></div>
       </div>
       <div class="grid-wrap">
         <div class="grid" id="grid" aria-label="Reels, 5 by 5"></div>
         <div class="ovl" id="ovl" aria-hidden="true"></div>
+        <div class="win-tag" id="winTag" hidden></div>
         <div class="banner" id="banner" hidden><div class="banner-title" id="bannerTitle"></div><div class="banner-sub" id="bannerSub"></div></div>
       </div>
       <p class="ticker" id="ticker" aria-live="polite">Spin to start. Land 3 Capture Cores for a bonus.</p>
@@ -67,8 +72,8 @@
       </div>
       <button id="spinBtn" class="spin" aria-label="Spin (space bar)">SPIN</button>
       <div class="buys">
-        <button id="buy0" class="buy"><span>Buy Street Hunt</span><b id="buyCost0"></b></button>
-        <button id="buy1" class="buy buy-raid"><span>Buy Night Raid</span><b id="buyCost1"></b></button>
+        <button id="buy0" class="buy"><span id="buyName0">Buy Bonus</span><b id="buyCost0"></b></button>
+        <button id="buy1" class="buy buy-raid"><span id="buyName1">Buy Super Bonus</span><b id="buyCost1"></b></button>
       </div>
       <div class="toggles">
         <label class="toggle"><input type="checkbox" id="turbo"> Turbo</label>
@@ -95,6 +100,6 @@
     <div id="infoBody"></div>
   </dialog>
 
-  <script type="module" src="app.js"></script>
+  <script type="module" src="app.js?v=6"></script>
 </body>
 </html>
