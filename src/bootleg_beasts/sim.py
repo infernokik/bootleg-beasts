@@ -17,7 +17,6 @@ from .config import (
     START_LEVEL,
     WIN_BUCKET_EDGES,
     Model,
-    capture_arrays,
     level_arrays,
 )
 
@@ -37,23 +36,21 @@ def start_by_cores() -> np.ndarray:
 
 
 def _bonus_args(model: Model, level_cum=None):
-    mults, shapes, sticky_w, sticky_x = level_arrays()
-    cap_v, cap_c = capture_arrays()
+    catch, hold, doubles = level_arrays()
     rv_s, rv_c, _ = model.reveal_table("bonus")
     reels = model.reels["bonus"]
     cum = model.level_override_cum() if level_cum is None else level_cum
-    return reels.strips, reels.lens, cum, rv_s, rv_c, mults, shapes, cap_v, cap_c, sticky_w, sticky_x
+    return reels.strips, reels.lens, cum, rv_s, rv_c, catch, hold, doubles
 
 
 def _game_args(model: Model, reel_key: str = "base"):
-    mults, shapes, sticky_w, sticky_x = level_arrays()
-    cap_v, cap_c = capture_arrays()
+    catch, hold, doubles = level_arrays()
     rb_s, rb_c, _ = model.reveal_table("base")
     rx_s, rx_c, _ = model.reveal_table("bonus")
     return (
         model.reels[reel_key].strips, model.reels[reel_key].lens, model.reels["bonus"].strips, model.reels["bonus"].lens,
         PAYTABLE, model.override_cum(reel_key if reel_key in model.override_weights else "base"), rb_s, rb_c, rx_s, rx_c, model.level_override_cum(),
-        mults, shapes, cap_v, cap_c, sticky_w, sticky_x, start_by_cores(), FREE_SPINS, REACTORS_PER_LEVEL, LEVEL_UP_SPINS,
+        catch, hold, doubles, start_by_cores(), FREE_SPINS, REACTORS_PER_LEVEL, LEVEL_UP_SPINS,
         MIN_WINS, MAX_WIN,
     )
 
@@ -61,10 +58,10 @@ def _game_args(model: Model, reel_key: str = "base"):
 def run_bonus(model: Model, start_level: int, n_rounds: int, seed: int = 1, chunk_size: int = 20_000,
               level_cum=None) -> dict:
     """Simulate `n_rounds` bonuses starting at `start_level` (what a bonus buy plays)."""
-    strips, lens, cum, rv_s, rv_c, mults, shapes, cv, cc, sw, sx = _bonus_args(model, level_cum)
+    strips, lens, cum, rv_s, rv_c, catch, hold, doubles = _bonus_args(model, level_cum)
     n_chunks = _chunks(n_rounds, chunk_size)
-    tot, sq, spins, drops, reactors, reach, reach_win, maxw, hist, hist_win = engine.simulate_bonus(
-        n_chunks, chunk_size, seed, strips, lens, PAYTABLE, cum, rv_s, rv_c, mults, shapes, cv, cc, sw, sx,
+    tot, sq, spins, drops, reactors, catches, mults, reach, reach_win, maxw, hist, hist_win = engine.simulate_bonus(
+        n_chunks, chunk_size, seed, strips, lens, PAYTABLE, cum, rv_s, rv_c, catch, hold, doubles,
         start_level, FREE_SPINS, REACTORS_PER_LEVEL, LEVEL_UP_SPINS, MIN_WINS, MAX_WIN, WIN_BUCKET_EDGES,
     )
     n = n_chunks * chunk_size
@@ -80,6 +77,8 @@ def run_bonus(model: Model, start_level: int, n_rounds: int, seed: int = 1, chun
         "avg_spins": spins.sum() / n,
         "avg_overrides": drops.sum() / n,
         "avg_reactors": reactors.sum() / n,
+        "avg_catches": catches.sum() / n,
+        "avg_final_mult": mults.sum() / n,
         "final_level_share": (reach_n / n).tolist(),
         "mean_win_by_final_level": (reach_win.sum(axis=0) / np.maximum(reach_n, 1)).tolist(),
         "p_max_win": maxw.sum() / n,
@@ -103,10 +102,10 @@ def run_buy(model: Model, buy_index: int, n_rounds: int, seed: int = 1, **kw) ->
 
 def sample_bonus(model: Model, start_level: int, n_rounds: int, seed: int = 1, chunk_size: int = 20_000):
     """Every bonus round's payout and final level."""
-    strips, lens, cum, rv_s, rv_c, mults, shapes, cv, cc, sw, sx = _bonus_args(model)
+    strips, lens, cum, rv_s, rv_c, catch, hold, doubles = _bonus_args(model)
     return engine.sample_bonus(
         _chunks(n_rounds, chunk_size), chunk_size, seed, strips, lens, PAYTABLE, cum, rv_s, rv_c,
-        mults, shapes, cv, cc, sw, sx, start_level, FREE_SPINS, REACTORS_PER_LEVEL, LEVEL_UP_SPINS, MIN_WINS, MAX_WIN,
+        catch, hold, doubles, start_level, FREE_SPINS, REACTORS_PER_LEVEL, LEVEL_UP_SPINS, MIN_WINS, MAX_WIN,
     )
 
 

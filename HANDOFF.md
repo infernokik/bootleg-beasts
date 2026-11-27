@@ -20,21 +20,25 @@ Building this as a resume project to get into the slot / iGaming industry. Likes
 style, pixel art, lots of features. Communicates casually; wants things done ("do whatever you think
 is best"). Keep all art original (no Pokémon or other IP; no adult content in public art).
 
-## State (v0.4 flagship + art revamp: done and pushed)
+## State (v0.5 bonus rebuild: done and pushed)
 
-- Base: 5x5, 3,125 ways. Static (X) mystery symbol. Glitch Wilds that land carry x2/x3/x5 in the base game
-  (Static-revealed ones count once: REVEALED_WILD in engine.py). Override Wild cross ~1 in 313 base spins.
-  3/4/5 Capture Cores start the bonus at level 1/2/3. Max win 10,000x.
-- Bonus: 4 levels (config.py `LEVELS`). 3 Reactors = +4 spins and next level. Beast captures stack.
-  Minimum win per start level (`MIN_BONUS_WIN`). Overload keeps column locks.
-- Buys: Override Spin 57.1x, Street Hunt 100x, Night Raid 289x, Lockdown 956x (Overload earned only).
-  Bonus Hunt ante 3x bet ("hunt" reel set, own Override rate). All modes verified at 96% (docs/par_sheet.md),
-  10^10-spin full-game z = -0.80.
-- Volatility very high (SD ~28x/spin); the user said keep it.
-- Art (v0.4): original hand-written SVG stickers in web/symbols.js (blob-URL <img>s), canvas back alley in
+- Base: 5x5, 3,125 ways. Static (X) mystery symbol. Tag Wilds (W) that land carry x2/x3/x5 in the base game
+  (Static-revealed ones count once: REVEALED_WILD in engine.py). Net Wild (OW, code name "override" in the
+  Python/JSON) drops a wild cross ~1 in 323 base spins. 3/4/5 Capture Cores start the bonus at level 1/2/3.
+  Max win 10,000x.
+- Bonus (v0.5): Net Wilds drop on reels 2-4 (netted reels too), turn the whole reel wild, and every beast
+  (H1-H4) on that reel adds the level's catch value to a Catch Multiplier that never resets. Levels in
+  config.py `LEVELS` (catch +1/+1/+2/+3, hold 0/1/2/forever, net chance x1/1.15/1.30/1.45). Overload
+  doubles the multiplier on arrival. 3 bonus Capture Cores ("R", same art) = +3 spins and next level.
+  The user complained that higher levels got fewer drops (locks blocked them) and that the per-spin
+  multiplier was weird; this design answers both.
+- Buys: Super Net Spin 57.1x, Street Hunt 100x, Night Raid 339x, Lockdown 1,405x (Overload earned only).
+  Bonus Hunt ante 3x bet. All modes verified at 96% (docs/par_sheet.md), 10^10-spin z = +0.29.
+- Volatility very high (SD ~23x/spin); the user said keep it.
+- Art: original hand-written SVG stickers in web/symbols.js (blob-URL <img>s), canvas back alley in
   web/background.js, Lilita One + Rubik from Google Fonts. Old Gemini pixel art kept in art/ only.
-  The user disliked the neon/cyberpunk look and wants Hacksaw-level polish.
-- Pipeline after any math change: `sims\tune.py` -> `sims\verify.py --spins 1e10 --bonus-rounds 5e7` (~16 min)
+  The user wants Hacksaw-level polish; they disliked the old neon look.
+- Pipeline after any math change: `sims\tune.py` -> `sims\verify.py --spins 1e10 --bonus-rounds 5e7` (~10 min)
   -> `sims\export_web.py` -> `sims\charts.py` -> pytest -> web/selftest.html -> bump `?v=` tags -> commit, push.
 
 ## Ideas if the user wants more

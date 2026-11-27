@@ -152,7 +152,7 @@ function candee() {
       `<path d="M38 48 Q60 62 84 44 M36 66 Q60 80 86 62" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round" opacity=".92"/>` + hl(48, 44, 6, 3.5));
 }
 
-function glitchBerry() {
+function berryPop() {
   const berries = [[44, 64, 16], [76, 64, 16], [60, 88, 16], [60, 50, 14]];
   const d = ([x, y, r]) => `M${x} ${y - r} A${r} ${r} 0 1 1 ${x - 0.1} ${y - r} Z`;
   const leaf = "M60 36 C54 22 66 12 82 16 C80 28 70 36 60 36 Z";
@@ -204,19 +204,30 @@ function wild() {
      </g></g>`;
 }
 
-function overrideWild() {
-  const ring = "M60 12 A48 48 0 1 1 59.9 12 Z";
-  const arrows = "M60 -2 L70 14 H50 Z M60 122 L50 106 H70 Z M-2 60 L14 50 V70 Z M122 60 L106 70 V50 Z";
-  return sticker(sil(ring, arrows)) +
-    cel("owa", ring, "#ff3b3b", "#b3122e", [52, 52, 46], hl(36, 34, 10, 5)) +
-    `<circle cx="60" cy="60" r="34" fill="none" stroke="#fff" stroke-width="5"/>` +
-    `<path d="M60 6 V114 M6 60 H114" stroke="${INK}" stroke-width="15" stroke-linecap="round"/>
-     <path d="M60 6 V114 M6 60 H114" stroke="#fff" stroke-width="7" stroke-linecap="round"/>` +
-    part(arrows, "#fff", 4) +
-    part("M60 46 A14 14 0 1 1 59.9 46 Z", "#ffd21f", 4.5) + `<circle cx="60" cy="60" r="5" fill="${INK}"/>` +
-    `<g transform="translate(37 86) scale(.55)">
-       <rect x="-8" y="-8" width="99" height="46" rx="10" fill="#ffd21f" stroke="${INK}" stroke-width="7"/>
-       <path d="${WILD_D}" fill="none" stroke="${INK}" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/></g>`;
+/** Net Wild: a monster-catcher net (hoop, rope mesh, taped handle) with a WILD plate. */
+function netWild() {
+  const hoop = "M62 4 A44 44 0 1 1 61.9 4 Z";
+  const handle = "M30 78 L40 88 L12 116 Q6 118 4 112 Q2 106 6 104 Z";
+  const plate = "M22 86 H102 Q108 86 108 92 V110 Q108 116 102 116 H22 Q16 116 16 110 V92 Q16 86 22 86 Z";
+  const inner = "M62 14 A34 34 0 1 1 61.9 14 Z";
+  let mesh = "";
+  for (let i = -60; i <= 60; i += 11) mesh += `M${62 + i - 50} -2 L${62 + i + 50} 98 M${62 + i + 50} -2 L${62 + i - 50} 98 `;
+  return sticker(sil(hoop, handle, plate)) +
+    part(handle, "#c77b3a", 4.5) +
+    `<path d="M24 92 L32 100 M18 98 L26 106" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>` +
+    `<path d="M30 78 L40 88 L34 94 L24 84 Z" fill="#ff3b3b" stroke="${INK}" stroke-width="3.5" stroke-linejoin="round"/>` +
+    `<clipPath id="nwc"><path d="${inner}"/></clipPath>` +
+    `<path d="${inner}" fill="#2a1d33" opacity=".85"/>` +
+    `<g clip-path="url(#nwc)"><circle cx="70" cy="40" r="30" fill="#4a3a5c" opacity=".7"/>
+       <path d="${mesh}" stroke="${INK}" stroke-width="5.5" fill="none"/>
+       <path d="${mesh}" stroke="#f4ead8" stroke-width="2.6" fill="none"/></g>` +
+    `<path d="${hoop}" fill="none" stroke="${INK}" stroke-width="19"/>` +
+    `<path d="${hoop}" fill="none" stroke="#ff3b3b" stroke-width="11"/>` +
+    `<path d="M30 30 A40 40 0 0 1 62 10" fill="none" stroke="#ffb3a8" stroke-width="4" stroke-linecap="round"/>` +
+    `<path d="M62 4 A44 44 0 0 1 104 36" fill="none" stroke="#ffd21f" stroke-width="5" stroke-dasharray="7 8"/>` +
+    part(plate, "#ffd21f", 4.5) +
+    `<path d="M22 90 H70 L60 100 H20 Z" fill="#fff7c2" opacity=".55"/>` +
+    `<g transform="translate(37.5 92.5) scale(.6)"><path d="${WILD_D}" fill="none" stroke="${INK}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/></g>`;
 }
 
 function core() {
@@ -266,8 +277,8 @@ function staticTV() {
 
 const ART = {
   H1: sparkjaw(), H2: blazegob(), H3: tidewyrm(), H4: thornbyte(),
-  L1: heelSpray(), L2: candee(), L3: glitchBerry(), L4: medal(), L5: burnedDisc(),
-  W: wild(), OW: overrideWild(), S: core(), R: core(), X: staticTV(),
+  L1: heelSpray(), L2: candee(), L3: berryPop(), L4: medal(), L5: burnedDisc(),
+  W: wild(), OW: netWild(), S: core(), R: core(), X: staticTV(),
 };
 
 const URLS = {};

@@ -1,8 +1,7 @@
 // Full-screen bonus moments: the intro with the level ladder, level-up takeovers and the
 // count-up total at the end. Each one resolves when the player clicks (or after a timeout).
-import { symbolHTML } from "./symbols.js?v=13";
+import { symbolHTML } from "./symbols.js?v=14";
 
-const RUNG_TEXT = ["Wild columns · beast captures", "Bigger captures", "Columns lock wild", "Crosses · columns + wilds lock"];
 const TIERS = [
   [1000, "LEGENDARY WIN", "legend"],
   [250, "EPIC WIN", "epic"],
@@ -22,12 +21,12 @@ function host() {
   return el;
 }
 
-function ladder(levels, current, unlocking = -1) {
+function ladder(levels, current, rules, unlocking = -1) {
   return `<ol class="ladder">${levels.map((lv, i) => {
     const state = i < current ? "done" : i === current ? "current" : "locked";
     return `<li class="rung ${state}${i === unlocking ? " unlocking" : ""}" data-l="${i}">
       <span class="rung-num">${i + 1}</span><span class="rung-name">${lv.name}</span>
-      <span class="rung-text">${RUNG_TEXT[i] || ""}</span></li>`;
+      <span class="rung-text">${rules[i] || ""}</span></li>`;
   }).join("")}</ol>`;
 }
 
@@ -68,39 +67,42 @@ function present(html, cls, { minMs = 500, maxMs = 4000 } = {}) {
   });
 }
 
-export function intro({ levels, level, spins, perLevel, levelUpSpins, speed, auto }) {
+export function intro({ levels, level, spins, perLevel, levelUpSpins, rules, speed, auto }) {
   const lv = levels[level];
   const html = `<div class="scr-card">
     <div class="scr-kicker">Bonus unlocked</div>
     <div class="scr-title">${lv.name.toUpperCase()}</div>
     <div class="scr-sub"><b>${spins}</b> free spins</div>
-    ${ladder(levels, level)}
+    <div class="scr-hint"><span class="scr-icon">${symbolHTML("OW")}</span>
+      <span><b>Net Wilds</b> turn their reel wild and <b>catch every beast</b> on it. Each catch grows the
+      <b>Catch Multiplier</b>, and it <b>never resets</b>.</span></div>
+    ${ladder(levels, level, rules)}
     <div class="scr-hint"><span class="scr-icon">${symbolHTML("R")}</span>
-      Collect <b>${perLevel} Reactors</b> for <b>+${levelUpSpins} spins</b> and the next level</div>
+      <span>Collect <b>${perLevel} Capture Cores</b> for <b>+${levelUpSpins} spins</b> and the next level</span></div>
     <div class="scr-cta">Click to start</div></div>`;
   // Waits for the player (auto-closes only during Autoplay).
   return present(html, `intro lvl-${level}`, { minMs: 1000, maxMs: auto ? 4500 * speed : 120000 });
 }
 
-export function levelUp({ levels, level, levelUpSpins, speed, auto }) {
+export function levelUp({ levels, level, levelUpSpins, rules, speed, auto }) {
   const html = `<div class="scr-card">
     <div class="scr-kicker">Level up</div>
     <div class="scr-title">${levels[level].name.toUpperCase()}</div>
-    <div class="scr-sub"><b>+${levelUpSpins}</b> free spins · ${RUNG_TEXT[level]}</div>
-    ${ladder(levels, level, level)}
+    <div class="scr-sub"><b>+${levelUpSpins}</b> free spins · ${rules[level]}</div>
+    ${ladder(levels, level, rules, level)}
     <div class="scr-cta">Click to continue</div></div>`;
   return present(html, `levelup lvl-${level}`, { minMs: 1000, maxMs: auto ? 3500 * speed : 120000 });
 }
 
 /** Count the total up, rising through the win tiers as it passes them. */
-export async function outro({ levels, level, totalX, bet, floored, fmt, sfx, speed, auto }) {
+export async function outro({ levels, level, totalX, bet, floored, fmt, sfx, mult, caught, speed, auto }) {
   const amount = Math.round(totalX * bet * 100) / 100;
   const html = `<div class="scr-card">
     <div class="scr-kicker">Reached ${levels[level].name}</div>
     <div class="scr-title" id="scrTier">BONUS COMPLETE</div>
     <div class="scr-amount" id="scrAmt">0.00</div>
     <div class="scr-sub" id="scrX">${floored ? "Guaranteed minimum win" : "&nbsp;"}</div>
-    ${ladder(levels, level)}
+    <div class="scr-stats"><span>Catch Multiplier <b>×${mult.toLocaleString()}</b></span><span>Beasts caught <b>${caught}</b></span></div>
     <div class="scr-cta">Click to collect</div><div class="coins" aria-hidden="true"></div></div>`;
   const dur = Math.min(4200, 1400 + Math.sqrt(totalX) * 160) * speed;
   const shown = present(html, `outro lvl-${level}`, { minMs: dur, maxMs: auto ? dur + 2500 : 120000 });

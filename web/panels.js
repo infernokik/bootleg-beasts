@@ -1,6 +1,6 @@
 // Menus and dialogs: the splash screen, the buy-feature menu, autoplay setup, settings, game
 // history and the reality check. Each function opens a <dialog> and resolves with the choice.
-import { symbolHTML } from "./symbols.js?v=13";
+import { symbolHTML } from "./symbols.js?v=14";
 
 function dialog(cls, html, { dismissable = true } = {}) {
   const d = document.createElement("dialog");
@@ -33,9 +33,9 @@ export function splash(data) {
     const d = dialog("splash", `
       <div class="splash-logo" role="img" aria-label="Bootleg Beasts">${document.querySelector(".logo svg")?.outerHTML ?? ""}</div>
       <div class="feats">
-        ${feat("W", "Multiplier Wilds", "Every Glitch Wild in the base game carries ×2, ×3 or ×5, and they multiply each other.")}
-        ${feat("OW", "Override &amp; Capture", "Override Wilds blast a wild cross. In the bonus, every beast they hit adds to the multiplier.")}
-        ${feat("R", "Reactor Level-Up", "Collect 3 Reactors for +4 spins and the next level: Night Raid, Lockdown, then Overload.")}
+        ${feat("W", "Multiplier Wilds", "Every Tag Wild in the base game carries ×2, ×3 or ×5, and they multiply each other.")}
+        ${feat("OW", "Net &amp; Catch", "In the bonus, Net Wilds turn their reel wild and catch every beast on it. Each catch grows a multiplier that never resets.")}
+        ${feat("R", "Level Up", "Collect 3 Capture Cores for +3 spins and the next level. Overload doubles the multiplier and locks every net.")}
       </div>
       <div class="splash-stats">
         <span><b>${s.rtp ? (100 * s.rtp).toFixed(2) : "96.00"}%</b> RTP</span>

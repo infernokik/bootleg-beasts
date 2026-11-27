@@ -75,6 +75,7 @@ def main() -> None:
         cis.append(r["ci95"])
         print(f"[bonus] start {LEVELS[lvl].name:12s} mean {r['mean_win']:8.2f}x +/- {r['ci95']:.2f}  "
               f"reach {np.round(r['final_level_share'], 3).tolist()}  ({time.perf_counter() - t:.0f}s)")
+    out["net_chance"] = [float(model.override_probs(lv.key)[1:].sum()) for lv in LEVELS]
     out["buys"] = {}
     for i, b in enumerate(BUYS):
         r = out["bonus"][LEVELS[b.start_level].key]

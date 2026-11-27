@@ -1,6 +1,6 @@
 # Bootleg Beasts — Game Design & Math Spec
 
-**Status:** v0.4 (flagship pass: multiplier wilds, Bonus Hunt, Override Spin, new art), tuned. The math model is in [`src/bootleg_beasts/model.json`](../src/bootleg_beasts/model.json),
+**Status:** v0.5 (bonus rebuilt around Net Wilds and a Catch Multiplier that never resets), tuned. The math model is in [`src/bootleg_beasts/model.json`](../src/bootleg_beasts/model.json),
 built by [`sims/tune.py`](../sims/tune.py) and verified by [`sims/verify.py`](../sims/verify.py).
 **Title:** *Bootleg Beasts*. No released slot with this name turned up in a search in November 2026.
 
@@ -9,8 +9,8 @@ built by [`sims/tune.py`](../sims/tune.py) and verified by [`sims/verify.py`](..
 ## 1. Concept
 
 A back alley behind a black-market stall, under one flickering street lamp. Something went wrong at
-the bootleg factory and the knock-off monsters came alive. You catch them with stolen Capture Cores
-before they get away. The tone is grimy, loud and a little absurd, in the high-volatility style of
+the bootleg factory and the knock-off monsters came alive. You hunt them with stolen Capture Cores
+and throw Net Wilds over them before they get away. The tone is grimy, loud and a little absurd, in the high-volatility style of
 modern Hacksaw and Nolimit City games.
 
 **Art direction: back-alley bootleg (v0.4).** Hand-inked cartoon in the street-art tradition: chunky
@@ -67,13 +67,13 @@ Two reasons matter to a studio:
 | H4 | **Thornbyte** | Thorn gremlin: leaf ears, thorns, a sprout on its head, heavy-lidded eyes and a jagged grin | All reels |
 | L1 | **Heel Spray** | Knock-off spray can with a scribbled label | All reels |
 | L2 | **Candee** | Striped wrapped candy | All reels |
-| L3 | **Glitch Berry** | A bunch of purple berries | All reels |
+| L3 | **Berry Pop** | A bunch of purple berries | All reels |
 | L4 | **Champeen Medal** | Bronze star medal on a ribbon | All reels |
 | L5 | **Burned Disc** | Scorched CD-R with "MIX" in marker | All reels |
-| W | **Glitch Wild** | A spray-painted WILD tag. Substitutes for every paying symbol. In the base game it carries ×2, ×3 or ×5 | Reels 2–5 |
-| OW | **Override Wild** | Wild cross or column (section 4). **Dropped onto the grid by the game, not on the reel strips** | Reels 2–4 |
+| W | **Tag Wild** | A spray-painted WILD tag. Substitutes for every paying symbol. In the base game it carries ×2, ×3 or ×5 | Reels 2–5 |
+| OW | **Net Wild** | A catcher's net with a WILD plate. Base game: wild cross; bonus: wild reel that catches beasts (sections 4–5). **Dropped onto the grid by the game, not on the reel strips** | Reels 2–4 |
 | S | **Capture Core** | A glowing yellow core in a hazard-striped hex casing. Triggers the bonus | All reels, max 1 per reel |
-| R | **Reactor** | Same yellow art as the Capture Core. Collect 3 in the bonus to level up | Bonus reels 1–4 |
+| R | **Capture Core (bonus)** | Same art as the scatter. Collect 3 in the bonus to level up | Bonus reels 2–4 |
 | X | **Static** | A knock-off TV full of static with a "?". Mystery symbol: all Statics reveal the same random symbol each spin | All reels |
 
 ### Paytable (pays per way, × total bet)
@@ -85,25 +85,27 @@ Two reasons matter to a studio:
 | H3 Tidewyrm | 0.05 | 0.14 | 0.35 |
 | H4 Thornbyte | 0.05 | 0.12 | 0.25 |
 | L1 Heel Spray, L2 Candee | 0.02 | 0.05 | 0.12 |
-| L3 Glitch Berry, L4 Champeen Medal, L5 Burned Disc | 0.02 | 0.04 | 0.10 |
+| L3 Berry Pop, L4 Champeen Medal, L5 Burned Disc | 0.02 | 0.04 | 0.10 |
 
-Glitch Wild and Override Wild don't pay on their own. They substitute only. Pays were scaled down
+Tag Wild and Net Wild don't pay on their own. They substitute only. Pays were scaled down
 about 0.45× in v0.4 to pay for the base-game wild multipliers.
 
-**Multiplier Glitch Wilds (base game).** Every Glitch Wild that lands in the base game carries ×2, ×3
+**Multiplier Tag Wilds (base game).** Every Tag Wild that lands in the base game carries ×2, ×3
 or ×5 (weights 6 : 3 : 1, mean ×2.6). A wild counts as that many ways, so multipliers on one win
-multiply together. Wilds revealed by Static and cells under an Override count once. This keeps the
+multiply together. Wilds revealed by Static and cells under a Net count once. This keeps the
 exact formula exact: a landed wild enters its reel's count with weight 2.6 instead of 1.
 
 ### Reel strips
 
-Paying symbols and Static sit in stacks. Glitch Wilds, the one Capture Core per reel and (in the
-bonus) Reactors go between stacks, so they never split one. There are two reel sets: base (71–72
-stops per reel) and bonus (78–79 stops per reel, Reactors on reels 1–4, Static stacks on every reel).
+Paying symbols and Static sit in stacks. Tag Wilds and Capture Cores go between stacks, so they never
+split one. Reel sets: base (71–72 stops per reel), Bonus Hunt (base plus extra Cores) and bonus (64–66
+stops per reel). The bonus reels carry **fewer beasts** (single and double stacks) and more low
+symbols, because every beast a Net catches raises the multiplier for the rest of the bonus; one Core
+sits on each of reels 2–4.
 
 ### Static reveal weights
 
-| Reel set | H1 | H2 | H3 | H4 | each low | Glitch Wild |
+| Reel set | H1 | H2 | H3 | H4 | each low | Tag Wild |
 |---|---|---|---|---|---|---|
 | Base | 3 | 4 | 5 | 6 | 9–11 | 1 |
 | Bonus | 5 | 6 | 7 | 8 | 7 | 3 |
@@ -113,56 +115,62 @@ wall of one beast. The reveal happens before wins are counted.
 
 ---
 
-## 4. Override Wild
+## 4. Net Wild
 
-The Override Wild is dropped onto a random cell of reels 2–4 by a weighted draw, separate from the
-reel stops. That keeps the exact base-game formula exact (section 7) and lets the drop rate be tuned
+The Net Wild is dropped onto a random cell of reels 2–4 by a weighted draw, separate from the reel
+stops. That keeps the exact base-game formula exact (section 7) and lets the drop rate be tuned
 continuously.
 
-- **Base game:** a full **cross** (its row and column turn wild), about **1 in 313 spins** (1 in 69 in Bonus Hunt).
-- **Bonus levels 1–3:** a wild **column**. **Overload:** a full cross. It drops on 16.0% of free spins.
-- **Override Spin** (feature buy, 57.1× bet): one base spin with a guaranteed cross.
-- Capture Cores and Reactors are counted **before** the wilds land.
-- There is **no guaranteed drop**. v0.2 forced one on the last spin if none had landed. Players
-  noticed it always arrived at the end, so it was removed.
-
-**Beast capture (bonus only).** Every beast (H1–H4) the Override covers, including the cell it
-lands on, adds a random amount to that spin's multiplier, which starts at ×1. Captures **stack**:
-five beasts under one column can make a ×6–×11 spin.
-
-| Level | Capture values (weights) |
-|---|---|
-| Street Hunt | +1 (4), +2 (1) |
-| Night Raid | +1 (3), +2 (1) |
-| Lockdown | +1 (4), +2 (2), +3 (1) |
-| Overload | +1 (3), +2 (2), +3 (1) |
+- **Base game:** a full **cross** (its row and column turn wild), about **1 in 323 spins** (1 in 74 in Bonus Hunt).
+- **Super Net Spin** (feature buy, 57.1× bet): one base spin with a guaranteed cross.
+- **Bonus:** the Net covers its **whole reel** (section 5).
+- Capture Cores are counted **before** the wilds land. There is no guaranteed drop.
 
 ---
 
-## 5. The bonus: four levels
+## 5. The bonus: catch the beasts
 
-3, 4 or 5 Capture Cores start the bonus with **10 free spins** at level 1, 2 or 3. Every **3 Reactors**
-collected adds **+4 spins** and unlocks the next level. Each level keeps everything below it.
+3, 4 or 5 Capture Cores start the bonus with **10 free spins** at level 1, 2 or 3.
 
-| Level | Name | What it adds | Guaranteed minimum |
-|---|---|---|---|
-| 1 | **Street Hunt** | Override drops a wild column; beast captures | 20× |
-| 2 | **Night Raid** | Bigger capture values | 50× |
-| 3 | **Lockdown** | Override columns **lock** wild for the rest of the bonus | 120× |
-| 4 | **Overload** | Full **crosses** (the column still locks, the row is one spin), and every Glitch Wild that lands **locks** | 250× |
+**The core loop.** On any free spin a Net Wild can drop onto reel 2, 3 or 4, **including a reel that
+is already netted**. Its whole reel turns wild, and every **beast** (H1–H4) on that reel is **caught**.
+Each catch adds the level's catch value to the **Catch Multiplier**, which starts at ×1, **never
+resets**, and multiplies every win in the bonus. Catches happen before the spin's win, so the spin
+that catches already pays at the new multiplier. Statics reveal before the Net lands, so a Static
+that turns into a beast can be caught.
 
-Locked cells hide whatever lands under them, so Reactors and Cores under them don't count.
+**Holds.** On higher levels a netted reel stays wild for extra spins (a counter on the net shows how
+many). A held net is wild but only catches again if a new Net lands on it.
+
+**Levelling up.** Capture Cores land on the bonus reels too. Every **3 Cores** = **+3 spins** and the
+next level. Higher levels drop more Nets.
+
+| Level | Name | Catch value | Net hold | Net chance per spin | Guaranteed minimum |
+|---|---|---|---|---|---|
+| 1 | **Street Hunt** | +1× | that spin only | 30.3% | 20× |
+| 2 | **Night Raid** | +1× | +1 spin | 34.8% | 50× |
+| 3 | **Lockdown** | +2× | +2 spins | 39.3% | 150× |
+| 4 | **Overload** | +3× | rest of the bonus | 43.9% | (earned only) |
+
+Reaching **Overload doubles the Catch Multiplier** and locks every net on screen for good.
+
 The minimum is checked at the end: if the bonus paid less than the floor for its starting level, it
 pays the floor instead. Max win is **10,000×** per round, and the round ends as soon as it's reached.
 
 | Buy | Price | Starts on |
 |---|---|---|
 | Street Hunt | 100× | Street Hunt (same as 3 Cores) |
-| Night Raid | 289× | Night Raid (same as 4 Cores) |
-| Lockdown | 956× | Lockdown (same as 5 Cores) |
+| Night Raid | 339× | Night Raid (same as 4 Cores) |
+| Lockdown | 1,405× | Lockdown (same as 5 Cores) |
 
 Overload can't be bought. **Bonus Hunt** (ante, 3× bet per spin) plays on reels with extra Capture
-Cores: the bonus comes about 1 in 70 spins instead of 1 in 342, with its own Override rate tuned to 96%.
+Cores: the bonus comes about 1 in 70 spins instead of 1 in 342, with its own Net rate tuned to 96%.
+
+**Why this shape.** A multiplier that grows forever and reels that stay wild feed each other, so
+the design keeps each one in check. Street Hunt nets don't hold, which keeps its multiplier honest.
+The holds are short until Overload. The bonus reels carry fewer beasts. The tuner then solves the one
+remaining knob, the Net chance, so the 100× buy returns 96%. Prototypes with permanent locks from
+level 2 needed a Net chance near 8% (one Net per bonus) to stay at 96%, which is why the holds are timed.
 
 ---
 
@@ -172,27 +180,26 @@ Full tables and charts: **[par_sheet.md](par_sheet.md)** (generated by `sims/cha
 
 | Metric | Result |
 |---|---|
-| RTP, base mode | **96.00% ± 0.04%** (exact base + simulated bonus); 95.97% ± 0.06% over 10¹⁰ full-game spins (z = −0.80) |
-| Bonus Hunt (3×) RTP | 95.99% exact parts; 95.93% ± 0.09% over 2.5×10⁹ spins (z = −1.23) |
-| Override Spin (57.1×) RTP | 96.13% exact parts; 96.13% ± 0.01% over 2.5×10⁸ spins (z = +1.03) |
-| Bonus buy RTP | Street Hunt 96.40% ± 0.13%, Night Raid 96.11% ± 0.09%, Lockdown 96.14% ± 0.05% |
-| Base game RTP (exact) | 64.63%, 67% of the total |
+| RTP, base mode | **96.00% ± 0.03%** (exact base + simulated bonus); 96.00% ± 0.05% over 10¹⁰ full-game spins (z = +0.29) |
+| Bonus Hunt (3×) RTP | 95.99% exact parts; 95.99% ± 0.07% over 2.5×10⁹ spins (z = −0.04) |
+| Super Net Spin (57.1×) RTP | 96.14% exact parts; 96.14% ± 0.01% over 2.5×10⁸ spins (z = +0.97) |
+| Bonus buy RTP | Street Hunt 96.28% ± 0.10%, Night Raid 96.28% ± 0.08%, Lockdown 96.16% ± 0.05% |
+| Base game RTP (exact) | 64.06%, 67% of the total |
 | Hit frequency | 31.0% |
 | Bonus odds (3 / 4 / 5 Cores) | 1 in 342 / 1 in 9,140 / 1 in 610,574 (exact) |
-| Volatility (SD per spin) | 28.5× |
-| Max win 10,000× | 1 in 535,590 spins |
+| Volatility (SD per spin) | 23.1× |
+| Max win 10,000× | 1 in 552,486 spins |
 
-| Bonus from level 1 | Value |
-|---|---|
-| Mean / median payout | 96.4× / 20.0× |
-| 75th / 90th / 99th percentile | 40× / 113× / 1,572× |
-| Reaches Night Raid / Lockdown / Overload | 47.1% / 13.9% / 2.8% |
-| Average Override Wilds | 2.00 |
+| Per bonus, by start level | Street Hunt | Night Raid | Lockdown |
+|---|---|---|---|
+| Mean payout | 96.3× | 326× | 1,351× |
+| Median / 90th / 99th percentile | 31× / 180× / 900× | 85× / 571× / 5,255× | 379× / 3,913× / 10,000× |
+| Average Nets / beasts caught | 3.6 / 3.4 | 4.1 / 3.9 | 4.5 / 4.2 |
+| Average final Catch Multiplier | ×4.6 | ×6.5 | ×12.9 |
+| Reaches Night Raid / Lockdown / Overload | 40.0% / 7.1% / 0.9% | – / 40.0% / 7.1% | – / – / 39.9% |
 
-**Volatility note.** The brief asked for medium volatility (SD roughly 8–12×). This design lands
-at 28×: the level ladder and stacking captures put a lot of value in rare deep runs, and the median
-bonus sits on its 20× floor. Getting to medium would mean flatter captures, a higher floor and a
-cheaper path to Overload, which trades away the "reach the end" payoff. That is the main open decision.
+**Volatility note.** Very high, as chosen. The persistent multiplier puts value into long runs, and
+Lockdown buys hit the 10,000× cap about 1 in 29 times.
 
 ---
 
@@ -203,21 +210,21 @@ RTP = base-game wins + Σ over start levels  P(k Cores) × E[bonus payout from t
 ```
 
 1. **Base-game wins: exact, by formula.** Reel stops are independent of each other, of the Static
-   reveal and of the Override drop. Fix the revealed symbol and where the Override lands, and each
+   reveal and of the Net drop. Fix the revealed symbol and where the Net lands, and each
    reel's count of "this symbol or a wild" cells depends only on that reel's stop. So:
 
    ```
    E[win] = pay × E[c₁] × … × E[c_L] × P(c_{L+1} = 0)
    ```
 
-   Averaging over reveals and the 16 Override configurations gives the exact base RTP in milliseconds.
+   Averaging over reveals and the 16 Net configurations gives the exact base RTP in milliseconds.
 2. **Brute-force check.** For a reveal, all 1.91 billion stop combinations of the base reels are
    enumerated with Numba. They match the formula to ten decimal places.
 3. **Trigger odds: exact.** There's at most one Core per reel, so P(k Cores) is a Poisson-binomial.
 4. **Bonus payouts: Monte Carlo**, 5×10⁷ rounds per start level, with 95% confidence intervals.
 5. **Whole-game simulation as an independent check.** 10¹⁰ complete rounds, played exactly as a
-   player would. It agrees with the sum of the parts (z = −0.80). Bonus Hunt and Override Spin get the
-   same check (z = −1.23 and +1.03).
+   player would. It agrees with the sum of the parts (z = +0.29). Bonus Hunt and Super Net Spin get the
+   same check (z = −0.04 and +0.97).
 6. **The browser engine** (`web/engine.js`) is checked against Python on exported test grids and by
    its own Monte Carlo on the [self-test page](https://infernokik.github.io/bootleg-beasts/selftest.html).
 
@@ -252,13 +259,32 @@ first 10¹⁰-spin check failed (z = −4.3): Static-revealed wilds were carryin
 formula didn't model, and the 10,000× cap clipped rare base wins. Revealed wilds now count once, and
 the re-run passes. The art was redrawn from pixel art into the back-alley sticker style (section 1).
 
-Tried and dropped along the way: flat level multipliers (lottery-like, median under 10×) and crosses
+**v0.4 → v0.5: "the bonus feels flat and weird".** Play-test feedback: the lower levels seemed to get
+the super wild more often than the higher ones, and the per-spin multiplier felt odd. Both were
+right. Locked columns blocked new Override drops, so Lockdown and Overload ran out of drops. The
+capture multiplier also reset to ×1 every spin. The bonus was rebuilt:
+
+- The Override became the **Net Wild**, and it can land on netted reels too, so every level keeps
+  getting drops. The Net chance now **rises** with the level (30% → 44% per spin).
+- Captures feed one **Catch Multiplier** that never resets, shown in its own panel, with each caught
+  beast flying into it.
+- Levels got one clear rule each: catch value +1/+1/+2/+3, timed holds of 0/1/2 spins, and Overload
+  doubles the multiplier and locks every net.
+- The Reactor became a bonus **Capture Core**, so one symbol does one job across the game.
+- Presentation: nets unroll over the reel with a hold counter, a win counter in the middle of the
+  board (ways win × multiplier), a level ribbon, a spins and Core meter, and an Overload ×2 slam.
+- The Static-reveal fix from v0.4 carried over. The engine port and its self-test were rewritten,
+  and the self-test caught a renamed flag that had silently disabled the Super Net Spin's forced drop.
+
+Tried and dropped along the way: permanent locks from Night Raid up (needed a Net chance near 8% to
+stay at 96%, about one Net per bonus), catching on every held reel every spin (a bonus worth more than
+3× its price), flat level multipliers (lottery-like, median under 10×) and crosses
 on every level (one cross alone paid more than the buy price).
 
 ---
 
 ## 9. Decisions still open
 
-1. **Volatility.** Very high. Medium would need flatter captures and a higher floor (section 6).
-2. **Reactor art** reuses the yellow Capture Core art, so the bonus collect symbol matches the trigger.
-3. **Optional extras:** a jurisdiction switch (turbo, autoplay and buys off for UK rules) and bonus replays.
+1. **Volatility.** Very high (SD 23×). Lockdown at 1,405× is a premium buy; a gentler Overload (+2×
+   catches) would bring it to about 1,330×.
+2. **Optional extras:** a jurisdiction switch (turbo, autoplay and buys off for UK rules) and bonus replays.

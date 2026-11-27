@@ -9,6 +9,7 @@ export const STATIC = 12;
 export const REACTOR = 13;
 export const N_PAYING = 9;
 export const N_BEASTS = 4; // symbols 0-3 are the beasts (H1-H4)
+export const HOLD_FOREVER = 99; // a netted reel with this hold stays wild for the rest of the bonus
 
 // ---- Randomness ------------------------------------------------------------
 const POOL = new Uint32Array(4096);
@@ -38,12 +39,6 @@ export function addCross(mask, reel, row) {
   for (let r = 0; r < mask.length; r++) mask[r][row] = true;
 }
 
-/** Shape 1: the Override Wild's column. Shape 2: its whole row and column. */
-export function addShape(mask, reel, row, shape) {
-  if (shape === 2) addCross(mask, reel, row);
-  else for (let k = 0; k < mask[reel].length; k++) mask[reel][k] = true;
-}
-
 const cumulative = (w) => {
   let acc = 0;
   return w.map((x) => (acc += x));
@@ -71,7 +66,6 @@ export class Game {
     for (const [mode, table] of Object.entries(data.revealWeights)) {
       this.reveal[mode] = { syms: Object.keys(table).map((c) => this.codeToId[c]), cum: cumulative(Object.values(table)) };
     }
-    this.capture = data.levels.map((lv) => ({ values: lv.capture.values, cum: cumulative(lv.capture.weights) }));
   }
 
   draw(cum) {
@@ -109,26 +103,8 @@ export class Game {
     return { sym: cells.length ? sym : -1, cells };
   }
 
-  // Drop up to n Override Wilds on reels 2-4, each on a different reel, never on a blocked cell.
-  placeOverrides(n, blocked) {
-    const drops = [];
-    const used = new Set();
-    for (let i = 0; i < n; i++) {
-      const cands = [];
-      for (const r of this.overrideReels) {
-        if (used.has(r)) continue;
-        for (let k = 0; k < this.K; k++) if (!blocked[r][k]) cands.push([r, k]);
-      }
-      if (!cands.length) break;
-      const pick = cands[randInt(cands.length)];
-      used.add(pick[0]);
-      drops.push(pick);
-    }
-    return drops;
-  }
-
   // Ways win (x bet). With detail, also return each paying symbol's run and the cells it uses.
-  /** Ways win. `wmult` (base game only) gives each Glitch Wild not covered by an Override its
+  /** Ways win. `wmult` (base game only) gives each Tag Wild not covered by a Net its
    *  multiplier: it counts as that many ways, so multipliers on one win multiply together. */
   waysWin(grid, mask, detail = false, wmult = null) {
     const R = this.R;
@@ -172,7 +148,7 @@ export class Game {
     return detail ? { total, lines } : total;
   }
 
-  /** One base-game spin: reels stop, Cores are counted, Static reveals, then any Override expands. */
+  /** One base-game spin: reels stop, Cores are counted, Static reveals, then any Net expands. */
   baseSpin({ mode = "base", forceOverride = false } = {}) {
     const { grid, stops } = this.spinReels(mode);
     const landed = grid.map((c) => c.slice());
@@ -181,7 +157,7 @@ export class Game {
     const reveal = this.revealStatic(grid, null, "base");
     const mask = emptyMask(this.R, this.K);
     const n = forceOverride ? 1 : this.draw(this.cum[mode] ?? this.cum.base);
-    const drops = n > 0 ? this.placeOverrides(n, emptyMask(this.R, this.K)) : [];
+    const drops = n > 0 ? this.placeNets(n) : [];
     for (const [r, k] of drops) addCross(mask, r, k);
     const wmult = grid.map((col) => col.map(() => 1));
     const wildMults = [];
@@ -200,62 +176,71 @@ export class Game {
   startBonus(startLevel, cap = this.maxWin) {
     return {
       startLevel, level: startLevel, cap, spinsLeft: this.data.freeSpins, played: 0, meter: 0, reactors: 0,
-      total: 0, nDrop: 0, sticky: emptyMask(this.R, this.K), done: false, capped: false, floored: false,
+      caught: 0, mult: 1, total: 0, nDrop: 0, timer: new Array(this.R).fill(0), done: false, capped: false,
+      floored: false,
     };
   }
 
-  /** One free spin. Mirrors engine.bonus_round's loop body (guarantee off). */
+  /** Drop up to n Net Wilds on reels 2-4, each on a different reel (in the bonus, netted or not);
+   *  each drop picks uniformly among the cells of the reels not used yet. */
+  placeNets(n) {
+    const drops = [];
+    const free = [...this.overrideReels];
+    for (let i = 0; i < n && free.length; i++) {
+      const pick = randInt(free.length * this.K);
+      const r = free.splice(Math.floor(pick / this.K), 1)[0];
+      drops.push([r, pick % this.K]);
+    }
+    return drops;
+  }
+
+  /** One free spin. Mirrors engine.bonus_round's loop body. */
   bonusSpin(st) {
     const lv = this.levels[st.level];
     const levelBefore = st.level;
+    const multBefore = st.mult;
     st.spinsLeft--;
     st.played++;
-    const stickyBefore = copyMask(st.sticky);
+    const timerBefore = st.timer.slice();
     const { grid, stops } = this.spinReels("bonus");
     const landed = grid.map((c) => c.slice());
     const reactorCells = [];
     for (let r = 0; r < this.R; r++)
-      for (let k = 0; k < this.K; k++) if (!stickyBefore[r][k] && grid[r][k] === REACTOR) reactorCells.push([r, k]);
-    const mask = copyMask(stickyBefore);
-    const reveal = this.revealStatic(grid, stickyBefore, "bonus");
+      for (let k = 0; k < this.K; k++) if (grid[r][k] === REACTOR) reactorCells.push([r, k]);
+    const mask = timerBefore.map((t) => new Array(this.K).fill(t > 0));
+    const reveal = this.revealStatic(grid, null, "bonus");
     const n = this.draw(this.cum[lv.key]);
-    const drops = n > 0 ? this.placeOverrides(n, stickyBefore) : [];
+    const drops = n > 0 ? this.placeNets(n) : [];
     const captures = [];
-    let spinMult = 1;
-    for (const [dr, dk] of drops) {
-      for (let r = 0; r < this.R; r++)
-        for (let k = 0; k < this.K; k++) {
-          const hit = r === dr || (lv.shape === 2 && k === dk);
-          if (hit && !mask[r][k] && grid[r][k] < N_BEASTS) {
-            const cap = this.capture[st.level];
-            const value = cap.values[this.draw(cap.cum)];
-            spinMult += value;
-            captures.push({ r, k, sym: grid[r][k], value });
-            mask[r][k] = true;
-          }
+    for (const [dr] of drops) {
+      for (let k = 0; k < this.K; k++) {
+        if (grid[dr][k] < N_BEASTS) {
+          st.mult += lv.catch;
+          st.caught++;
+          captures.push({ r: dr, k, sym: grid[dr][k], value: lv.catch, mult: st.mult });
         }
-      addShape(mask, dr, dk, lv.shape);
+        mask[dr][k] = true;
+      }
+      const t = lv.hold >= HOLD_FOREVER ? HOLD_FOREVER : lv.hold + 1;
+      if (t > st.timer[dr]) st.timer[dr] = t;
     }
-    if (lv.stickyCrosses) for (const [r, k] of drops) addShape(st.sticky, r, k, 1); // column locks; a cross row is one spin
     st.nDrop += drops.length;
     const { total: base, lines } = this.waysWin(grid, mask, true);
-    let spinWin = base * lv.mult * spinMult;
+    let spinWin = base * st.mult;
+    const spinMult = st.mult;
     st.total += spinWin;
-    const newSticky = [];
     let levelUps = 0;
+    let doubled = false;
+    let timerDecayed = st.timer.slice();
     if (st.total >= st.cap) {
       spinWin -= st.total - st.cap;
       st.total = st.cap;
       st.capped = true;
       st.done = true;
+      st.reactors += reactorCells.length;
     } else {
-      if (lv.stickyWilds)
-        for (let r = 0; r < this.R; r++)
-          for (let k = 0; k < this.K; k++)
-            if (grid[r][k] === WILD && !st.sticky[r][k]) {
-              st.sticky[r][k] = true;
-              newSticky.push([r, k]);
-            }
+      for (let r = 0; r < this.R; r++) if (st.timer[r] > 0 && st.timer[r] < HOLD_FOREVER) st.timer[r]--;
+      timerDecayed = st.timer.slice();
       st.reactors += reactorCells.length;
       st.meter += reactorCells.length;
       while (st.meter >= this.data.reactorsPerLevel && st.level < this.levels.length - 1) {
@@ -263,6 +248,11 @@ export class Game {
         st.level++;
         st.spinsLeft += this.data.levelUpSpins;
         levelUps++;
+        if (this.levels[st.level].doubles) {
+          st.mult *= 2;
+          doubled = true;
+          for (let r = 0; r < this.R; r++) if (st.timer[r] > 0) st.timer[r] = HOLD_FOREVER;
+        }
       }
       if (st.spinsLeft <= 0) st.done = true;
     }
@@ -274,8 +264,8 @@ export class Game {
       }
     }
     return {
-      grid, landed, stops, mask, stickyBefore, drops, reveal, reactorCells, captures, spinMult, lines,
-      baseWin: base, spinWin, levelBefore, levelUps, newSticky, shape: lv.shape,
+      grid, landed, stops, mask, timerBefore, timerDecayed, timerAfter: st.timer.slice(), drops, reveal, reactorCells, captures,
+      multBefore, spinMult, lines, baseWin: base, spinWin, levelBefore, levelUps, doubled,
     };
   }
 

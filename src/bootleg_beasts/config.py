@@ -16,11 +16,11 @@ ROWS = 5
 
 # ---- Symbols ---------------------------------------------------------------
 H1, H2, H3, H4, L1, L2, L3, L4, L5 = range(9)
-WILD = 9  # Glitch Wild: substitutes for every paying symbol
-OVERRIDE = 10  # Override Wild: dropped onto reels 2-4 by the feature, turns its row and column wild
+WILD = 9  # Tag Wild: substitutes for every paying symbol
+OVERRIDE = 10  # Net Wild: dropped onto reels 2-4; base game: its row and column turn wild, bonus: its reel
 CORE = 11  # Capture Core: scatter, 3/4/5 trigger the bonus at level 1/2/3
 STATIC = 12  # Static: mystery symbol, every Static on screen reveals the same random symbol
-REACTOR = 13  # Reactor: bonus only, collect 3 to level up
+REACTOR = 13  # bonus Capture Core: collect 3 to level up (code "R", same art as the scatter)
 N_PAYING = 9
 
 CODES = ["H1", "H2", "H3", "H4", "L1", "L2", "L3", "L4", "L5", "W", "OW", "S", "X", "R"]
@@ -31,19 +31,19 @@ NAMES = [
     "Thornbyte",
     "Heel Spray",
     "Candee",
-    "Glitch Berry",
+    "Berry Pop",
     "Champeen Medal",
     "Burned Disc",
-    "Glitch Wild",
-    "Override Wild",
+    "Tag Wild",
+    "Net Wild",
     "Capture Core",
     "Static",
-    "Reactor",
+    "Capture Core",
 ]
 CODE_TO_ID = {code: i for i, code in enumerate(CODES)}
 
 # ---- Paytable: pay per way (x total bet), indexed [symbol, run length] -------
-# Pays are small because base-game Glitch Wilds carry x2-x5 multipliers that multiply ways.
+# Pays are small because base-game Tag Wilds carry x2-x5 multipliers that multiply ways.
 _PAYS = {
     H1: (0.10, 0.25, 0.70),
     H2: (0.07, 0.18, 0.45),
@@ -60,8 +60,8 @@ for _sym, _pays in _PAYS.items():
     PAYTABLE[_sym, 3:] = _pays
 
 MAX_WIN = 10_000.0
-# Base game: every Glitch Wild that lands on the reels (not one revealed by Static) and isn't covered
-# by an Override carries a multiplier. In a ways game it counts as that many ways, so multipliers on one win multiply.
+# Base game: every Tag Wild that lands on the reels (not one revealed by Static) and is not covered
+# by a Net carries a multiplier. In a ways game it counts as that many ways, so multipliers on one win multiply.
 BASE_WILD_MULTS = ((2, 3, 5), (6, 3, 1))  # (values, weights)
 BASE_WILD_MULT_MEAN = sum(v * w for v, w in zip(*BASE_WILD_MULTS)) / sum(BASE_WILD_MULTS[1])
 OVERRIDE_REELS = (1, 2, 3)  # 0-based, i.e. reels 2-4
@@ -73,41 +73,35 @@ WIN_BUCKET_EDGES = np.array(
 
 
 # ---- Bonus: one bonus with four levels ----------------------------------------
+# Every free spin a Net Wild may drop onto reels 2-4 and turn its whole reel wild. Every beast (H1-H4)
+# on that reel is caught and adds the level's catch value to the Catch Multiplier, which starts at x1,
+# never resets, and multiplies every win in the bonus. A Net can land on a reel that is already
+# netted: it catches that reel's beasts again and refreshes the hold.
+HOLD_FOREVER = 99  # a hold this long never runs out
+
+
 @dataclass(frozen=True)
 class Level:
     key: str
     name: str
-    mult: int  # every win in this level is multiplied by this
-    override_shape: int  # what an Override Wild turns wild: 1 = its column, 2 = its row and column
-    sticky_wilds: bool  # Glitch Wilds that land stay wild for the rest of the bonus
-    sticky_crosses: bool  # Override Wild columns/crosses stay wild for the rest of the bonus
-    override_factor: float  # Override drop chance relative to level 1
+    catch: int  # each caught beast adds this much to the Catch Multiplier
+    hold: int  # extra spins a netted reel stays wild after the spin it lands (HOLD_FOREVER = rest of bonus)
+    net_factor: float  # Net Wild drop chance relative to level 1
+    doubles: bool  # reaching this level doubles the Catch Multiplier and locks every net on screen
 
-
-SHAPE_COLUMN = 1
-SHAPE_CROSS = 2
 
 LEVELS = (
-    Level("street_hunt", "Street Hunt", 1, SHAPE_COLUMN, False, False, 1.0),
-    Level("night_raid", "Night Raid", 1, SHAPE_COLUMN, False, False, 1.0),
-    Level("lockdown", "Lockdown", 1, SHAPE_COLUMN, False, True, 1.0),
-    Level("overload", "Overload", 1, SHAPE_CROSS, True, True, 1.0),
+    Level("street_hunt", "Street Hunt", 1, 0, 1.00, False),
+    Level("night_raid", "Night Raid", 1, 1, 1.15, False),
+    Level("lockdown", "Lockdown", 2, 2, 1.30, False),
+    Level("overload", "Overload", 3, HOLD_FOREVER, 1.45, True),
 )
-
-# Beast capture (bonus only): each beast (H1-H4) under a freshly dropped Override Wild's column or
-# cross is captured and adds a random amount to that spin's multiplier (which starts at x1).
-# Per level: (values, weights).
-CAPTURE = (
-    ((1, 2, 0), (4, 1, 0)),
-    ((1, 2, 0), (3, 1, 0)),
-    ((1, 2, 3), (4, 2, 1)),
-    ((1, 2, 3), (3, 2, 1)),
-)
+N_BEASTS = 4  # symbols 0-3 (H1-H4) are the beasts a Net catches
 # Guaranteed minimum bonus win (x bet) by starting level.
-MIN_BONUS_WIN = (20.0, 50.0, 120.0, 250.0)
+MIN_BONUS_WIN = (20.0, 50.0, 150.0, 250.0)
 FREE_SPINS = 10
-REACTORS_PER_LEVEL = 3  # collect this many Reactors to reach the next level
-LEVEL_UP_SPINS = 4  # extra free spins awarded on each level-up
+REACTORS_PER_LEVEL = 3  # collect this many bonus Capture Cores to reach the next level
+LEVEL_UP_SPINS = 3  # extra free spins awarded on each level-up
 START_LEVEL = {3: 0, 4: 1, 5: 2}  # Capture Cores -> starting level (0-based)
 
 
@@ -128,27 +122,19 @@ BUYS = (
 ANTE_KEY = "hunt"
 ANTE_NAME = "Bonus Hunt"
 ANTE_PRICE = 3.0  # x bet per spin
-# Feature spin: a base spin with a guaranteed Override Wild cross, priced from the exact maths.
+# Feature spin: a base spin with a guaranteed Net Wild cross, priced from the exact maths.
 FEATURE_KEY = "override_spin"
-FEATURE_NAME = "Override Spin"
+FEATURE_NAME = "Super Net Spin"
 
 MODEL_PATH = Path(__file__).with_name("model.json")
 
 
-def capture_arrays():
-    """Capture values [level, i] and cumulative weights [level, i] for Numba."""
-    vals = np.array([v for v, _ in CAPTURE], dtype=np.int64)
-    cum = np.cumsum(np.array([w for _, w in CAPTURE], dtype=np.int64), axis=1)
-    return vals, cum
-
-
 def level_arrays():
-    """Level rules as flat arrays for Numba kernels."""
+    """Level rules as flat arrays for Numba kernels: catch values, holds, doubling flags."""
     return (
-        np.array([lv.mult for lv in LEVELS], dtype=np.int64),
-        np.array([lv.override_shape for lv in LEVELS], dtype=np.int64),
-        np.array([lv.sticky_wilds for lv in LEVELS], dtype=np.bool_),
-        np.array([lv.sticky_crosses for lv in LEVELS], dtype=np.bool_),
+        np.array([lv.catch for lv in LEVELS], dtype=np.int64),
+        np.array([lv.hold for lv in LEVELS], dtype=np.int64),
+        np.array([lv.doubles for lv in LEVELS], dtype=np.bool_),
     )
 
 
@@ -176,7 +162,7 @@ class ReelSet:
 class Model:
     version: str
     reels: dict[str, ReelSet]  # "base" and "bonus"
-    # Weights for dropping 0, 1 or 2 Override Wilds on a spin: "base" and one list per level.
+    # Weights for dropping 0, 1 or 2 Net Wilds on a spin: "base" and one list per level.
     override_weights: dict[str, list[int]]
     # What Static reveals into: symbol code -> weight, for "base" and "bonus".
     reveal_weights: dict[str, dict[str, int]]

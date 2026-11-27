@@ -1,6 +1,6 @@
 """Export the tuned model for the browser demo, plus test vectors that check the JS engine.
 
-  web/game-data.json     rules, paytable, reel strips, Override Wild weights, verified stats
+  web/game-data.json     rules, paytable, reel strips, Net Wild weights, verified stats
   web/test-vectors.json  random grids + wild masks with the Python engine's ways win, so the JS
                          engine can be checked to give exactly the same answer
 
@@ -23,9 +23,9 @@ from bootleg_beasts.config import (
     FEATURE_KEY,
     FEATURE_NAME,
     BUYS,
-    CAPTURE,
     CODES,
     FREE_SPINS,
+    HOLD_FOREVER,
     LEVEL_UP_SPINS,
     LEVELS,
     MAX_WIN,
@@ -62,6 +62,8 @@ def stats() -> dict:
         "triggerOdds": [1 / p for p in r["exact"]["p_trigger"]],
         "bonusMean": [r["bonus"][lv.key]["mean_win"] for lv in LEVELS[:3]],
         "levelReach": [r["bonus"][lv.key]["final_level_share"] for lv in LEVELS[:3]],
+        "bonusNets": [r["bonus"][lv.key]["avg_overrides"] for lv in LEVELS[:3]],
+        "bonusMult": [r["bonus"][lv.key].get("avg_final_mult") for lv in LEVELS[:3]],
         "buyRtp": {k: v["rtp"] for k, v in r["buys"].items()},
         "buyProfile": {k: v["profile"] for k, v in r["buys"].items()},
         "ante": r.get("ante", {}),
@@ -111,11 +113,11 @@ def main() -> None:
         "levelUpSpins": LEVEL_UP_SPINS,
         "startLevel": {str(k): v for k, v in START_LEVEL.items()},
         "minBonusWin": list(MIN_BONUS_WIN),
+        "holdForever": HOLD_FOREVER,
         "levels": [
-            {"key": lv.key, "name": lv.name, "mult": lv.mult, "shape": lv.override_shape,
-             "stickyWilds": lv.sticky_wilds, "stickyCrosses": lv.sticky_crosses,
-             "capture": {"values": list(CAPTURE[i][0]), "weights": list(CAPTURE[i][1])}}
-            for i, lv in enumerate(LEVELS)
+            {"key": lv.key, "name": lv.name, "catch": lv.catch, "hold": lv.hold, "doubles": lv.doubles,
+             "netChance": model.override_probs(lv.key)[1:].sum().item()}
+            for lv in LEVELS
         ],
         "buys": [{"key": b.key, "name": b.name, "startLevel": b.start_level, "price": model.buy_prices[b.key]}
                  for b in BUYS],

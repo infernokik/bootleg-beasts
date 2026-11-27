@@ -10,6 +10,7 @@ from bootleg_beasts.config import (
     CODE_TO_ID,
     CORE,
     H1,
+    HOLD_FOREVER,
     L5,
     N_PAYING,
     PAYTABLE,
@@ -19,7 +20,6 @@ from bootleg_beasts.config import (
     WILD,
     Model,
     ReelSet,
-    capture_arrays,
     level_arrays,
 )
 
@@ -133,89 +133,101 @@ def test_no_static_reveals_nothing():
 
 
 # ---- Bonus levels ----------------------------------------------------------------
-EVERY_SPIN = [0, 1, 0]  # Override Wild drop weights: always one
+EVERY_SPIN = [0, 1, 0]  # Net Wild drop weights: always one
 NEVER = [1, 0, 0]
 
 
-def _bonus(reels, start_level, weights=NEVER, guarantee=False, paytable=None, cap=None):
-    """Play one bonus on hand-built reels. Returns the result and the final locked-cell grid."""
+def _bonus(reels, start_level, weights=NEVER, paytable=None, catch=None, seed=11):
+    """Play one bonus on hand-built reels. Returns (win, played, nets, final level, Cores, caught,
+    final multiplier, capped) and the final hold timers."""
     lens = np.array([len(r) for r in reels], dtype=np.int64)
     strips = np.full((REELS, max(lens)), CODE_TO_ID["L5"], dtype=np.int8)
     for r, reel in enumerate(reels):
         strips[r, : len(reel)] = [CODE_TO_ID[c] for c in reel]
     level_cum = np.tile(np.cumsum(np.array(weights, dtype=np.int64)), (4, 1))
-    mults, shapes, sw, sx = level_arrays()
-    cv, cc = capture_arrays() if cap is None else cap
-    sticky = no_mask()
+    cv, hold, doubles = level_arrays()
+    if catch is not None:
+        cv = np.array(catch, np.int64)
+    timer = np.zeros(REELS, np.int64)
     pt = np.zeros_like(PAYTABLE) if paytable is None else paytable
-    _seed(11)
+    _seed(seed)
     res = engine.bonus_round(
-        strips, lens, pt, level_cum, np.array([L5], np.int64), np.array([1], np.int64), mults,
-        shapes, cv, cc, sw, sx, start_level, 10, 3, 4, guarantee, 0.0, 5000.0, np.empty((REELS, ROWS), np.int8), no_mask(),
-        sticky, scratch(), np.zeros(3, np.int64), np.zeros(3, np.int64),
+        strips, lens, pt, level_cum, np.array([L5], np.int64), np.array([1], np.int64), cv, hold, doubles,
+        start_level, 10, 3, 3, 0.0, 5000.0, np.empty((REELS, ROWS), np.int8), no_mask(), timer, scratch(),
+        np.zeros(3, np.int64), np.zeros(3, np.int64),
     )
-    return res, sticky
+    return res, timer
 
 
-ONE_REACTOR = [["R", "L5", "L5", "L5", "L5"]] + [["L5"] * 5] * 4  # exactly one Reactor per spin
+ONE_CORE = [["L5"] * 5, ["R", "L5", "L5", "L5", "L5"]] + [["L5"] * 5] * 3  # exactly one bonus Core per spin
 
 
-def test_reactors_level_up_and_add_spins():
-    (total, played, drops, final, reactors, capped), _ = _bonus(ONE_REACTOR, 0)
-    # Levels at 3, 6 and 9 Reactors, +4 spins each: 10 + 12 spins, top level reached.
-    assert (played, final, reactors) == (22, 3, 22)
+def test_cores_level_up_and_add_spins():
+    (total, played, nets, final, cores, caught, mult, capped), _ = _bonus(ONE_CORE, 0)
+    # Levels at 3, 6 and 9 Cores, +3 spins each: 10 + 9 spins, top level reached.
+    assert (played, final, cores) == (19, 3, 19)
 
 
-def test_no_flat_level_multiplier():
+def test_no_nets_no_multiplier():
     pt = np.zeros_like(PAYTABLE)
-    pt[L5, 5] = 0.001  # reel 1 shows 4 L5 + the Reactor: 4*5*5*5*5 = 2500 ways = 2.5x per spin
-    (total, *_), _ = _bonus(ONE_REACTOR, 0, paytable=pt)
-    assert total == pytest.approx(22 * 2.5)
+    pt[L5, 5] = 0.001  # 5 L5 on reel 1, the Core reel shows 4: 5*4*5*5*5 = 2500 ways = 2.5x per spin
+    (total, played, nets, final, cores, caught, mult, capped), _ = _bonus(ONE_CORE, 0, paytable=pt)
+    assert mult == 2 and nets == 0  # reaching Overload doubles the x1 multiplier
+    # Overload arrives after spin 9 (the 9th Core): spins 1-9 pay x1, spins 10-19 pay x2
+    assert total == pytest.approx(9 * 2.5 + 10 * 2.5 * 2)
 
 
-def test_captured_beasts_stack_multipliers():
-    """Street Hunt column drops every spin on reels full of beasts: each drop captures all 5
-    beasts in its column, including the one it lands on: x(1 + 5*2) = x11."""
+def test_catch_multiplier_never_resets():
+    """A Net every spin on reels full of beasts catches all 5 beasts of its reel: +5 per spin at +1
+    per catch, so spin i pays x(1 + 5i) and nothing resets."""
     pt = np.zeros_like(PAYTABLE)
     pt[H1, 5] = 0.001
-    reels = [["H1"] * 5] * 5
-    two = (np.full((4, 3), 2, np.int64), np.cumsum(np.ones((4, 3), np.int64), axis=1))
-    zero = (np.zeros((4, 3), np.int64), np.cumsum(np.ones((4, 3), np.int64), axis=1))
-    (with_cap, *_), _ = _bonus(reels, 0, EVERY_SPIN, paytable=pt, cap=two)
-    (no_cap, *_), _ = _bonus(reels, 0, EVERY_SPIN, paytable=pt, cap=zero)
-    assert with_cap == pytest.approx(11 * no_cap)
+    beasts = [["H1"] * 5] * 5
+    (total, played, nets, final, cores, caught, mult, capped), _ = _bonus(
+        beasts, 0, EVERY_SPIN, paytable=pt, catch=[1, 1, 1, 1])
+    assert (played, nets, caught, mult) == (10, 10, 50, 51)
+    assert total == pytest.approx(sum(1 + 5 * i for i in range(1, 11)) * 3.125)
 
 
-def test_starting_level_skips_ahead():
-    (total, played, drops, final, reactors, capped), _ = _bonus(ONE_REACTOR, 2)
-    assert (played, final) == (14, 3)
+def test_catch_value_by_level():
+    beasts = [["H1"] * 5] * 5
+    for level, per in ((0, 1), (1, 1), (2, 2)):
+        (_, played, nets, _, _, caught, mult, _), _ = _bonus(beasts, level, EVERY_SPIN)
+        assert (nets, caught, mult) == (10, 50, 1 + 50 * per)
+    (_, _, nets, _, _, caught, mult, _), _ = _bonus(beasts, 3, EVERY_SPIN)
+    assert mult == 1 + 50 * 3
 
 
-def test_only_overload_locks_glitch_wilds():
-    reels = [["L5"] * 5, ["W", "L5", "L5", "L5", "L5", "L5", "L5"]] + [["L5"] * 5] * 3
-    _, sticky = _bonus(reels, 3)
-    assert sticky[1].any() and not sticky[0].any() and not sticky[2:].any()
-    for level in (0, 1, 2):  # wilds only lock on Overload
-        _, sticky = _bonus(reels, level)
-        assert not sticky.any()
-
-
-def test_lockdown_locks_override_columns():
+def test_nets_hit_netted_reels_on_every_level():
+    """Nets can land on a reel that is already netted, so every level gets a Net every spin here
+    (the old design blocked locked reels, so higher levels saw fewer)."""
     dead = [["L5"] * 5] * 5
-    (_, _, drops, _, _, _), sticky = _bonus(dead, 2, EVERY_SPIN)
-    assert drops == 3 and sticky[1:4].all() and not sticky[0].any()  # each locked column fills one of reels 2-4
-    (_, _, drops, _, _, _), sticky = _bonus(dead, 3, EVERY_SPIN)  # Overload: crosses, but only the column locks
-    assert drops == 3 and sticky[1:4].all() and not sticky[0].any() and not sticky[4].any()
-    for level in (0, 1):
-        (_, _, drops, _, _, _), sticky = _bonus(dead, level, EVERY_SPIN)
-        assert drops == 10 and not sticky.any()
+    for level in range(4):
+        (_, played, nets, *_), _ = _bonus(dead, level, EVERY_SPIN)
+        assert nets == played == 10
 
 
-def test_guaranteed_cross():
+def test_holds_by_level():
     dead = [["L5"] * 5] * 5
-    for seed in range(20):
-        (_, _, drops, _, _, _), _ = _bonus(dead, 0, NEVER, guarantee=True)
-        assert drops == 1
+    one_net = [0, 1, 0]
+    # Street Hunt: no hold, nothing stays netted
+    _, timer = _bonus(dead, 0, one_net)
+    assert not timer.any()
+    # Overload: every netted reel holds for good
+    _, timer = _bonus(dead, 3, one_net)
+    assert set(timer[1:4].tolist()) == {HOLD_FOREVER} and timer[0] == timer[4] == 0
+
+
+def test_hold_makes_reel_wild_next_spin():
+    """A Night Raid Net holds its reel one more spin: with a wild-only win on reel 1..5 of L5 the win
+    needs the netted reel, so held spins pay too."""
+    pt = np.zeros_like(PAYTABLE)
+    pt[L5, 5] = 0.001
+    reels = [["L5"] * 5, ["L5"] * 5, ["L4"] * 5, ["L5"] * 5, ["L5"] * 5]  # reel 3 blocks every L5 win
+    w0, _ = _bonus(reels, 0, EVERY_SPIN, paytable=pt, seed=5)
+    w1, _ = _bonus(reels, 1, EVERY_SPIN, paytable=pt, seed=5)
+    # with a Net every spin both win on the spins where reel 3 is netted; Night Raid's holds can only add
+    assert w1[0] >= w0[0] > 0
 
 
 # ---- Exact maths vs brute force ------------------------------------------------

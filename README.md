@@ -1,7 +1,7 @@
 # Bootleg Beasts — Slot Math & Simulation
 
-A 5×5, 3,125-ways slot with a **level-up bonus**. Collect Reactors to unlock new features, and hunt
-beasts with the **Override Wild**: every beast it hits adds to the spin multiplier. This repo has the
+A 5×5, 3,125-ways slot with a **catch-the-beasts bonus**. **Net Wilds** turn whole reels wild and
+catch every beast on them, and each catch grows a **Catch Multiplier that never resets**. This repo has the
 full math model, an exact calculation of the base game, and Monte Carlo verification showing the game
 hits **96% RTP**.
 
@@ -13,18 +13,21 @@ engine against Python in your browser. Virtual credits only, no real-money play.
 
 ## Features
 
-- **Multiplier Wilds:** every Glitch Wild that lands in the base game carries ×2, ×3 or ×5, and they multiply each other.
+- **Multiplier Wilds:** every Tag Wild that lands in the base game carries ×2, ×3 or ×5, and they multiply each other.
 - **Static TVs** are mystery symbols: every Static on screen reveals the same random symbol.
-- **Override Wild** drops a wild cross in the base game (about 1 in 313 spins).
-- **Bonus with four levels**, started by 3, 4 or 5 Capture Cores. Every 3 Reactors give +4 spins and the next level:
-  Street Hunt → Night Raid → **Lockdown** (Override columns lock wild) → **Overload** (full crosses, columns and Glitch Wilds lock).
-- **Beast capture:** each beast under an Override adds +1 to +3 to that spin's multiplier, and captures stack.
-- **Bonus buys:** Street Hunt (100×), Night Raid (289×) and Lockdown (956×), matching 3, 4 and 5 Cores, plus the
-  **Override Spin** (57.1×, a guaranteed cross). Guaranteed minimum win per start level. Overload must be earned.
+- **Net Wild** drops a wild cross in the base game (about 1 in 323 spins).
+- **The bonus** (3, 4 or 5 Capture Cores): Net Wilds land on reels 2–4, even on reels already netted, and turn the
+  whole reel wild. Every beast on it is **caught** and adds to the **Catch Multiplier**, which never resets.
+- **Four levels**, each with one clear rule: Street Hunt (+1× per catch) → Night Raid (nets hold 1 more spin) →
+  Lockdown (+2× per catch, nets hold 2) → **Overload** (multiplier doubles, +3× per catch, nets lock for good).
+  Every 3 Capture Cores in the bonus = +3 spins and the next level, and higher levels drop more Nets.
+- **Bonus buys:** Street Hunt (100×), Night Raid (339×) and Lockdown (1,405×), matching 3, 4 and 5 Cores, plus the
+  **Super Net Spin** (57.1×, a guaranteed cross). Guaranteed minimum win per start level. Overload must be earned.
 - **Bonus Hunt** ante: 3× bet per spin for the bonus about 1 in 70 spins instead of 1 in 342.
-- Full-screen bonus intro with the level ladder, level-up screens, and a count-up win screen (BIG → MEGA → EPIC → LEGENDARY).
+- Presentation: nets unroll over the reels with hold counters, caught beasts fly into the multiplier, a centre-board
+  win counter shows ways win × multiplier, a level ribbon, an Overload ×2 slam, full-screen intro, level-up and
+  count-up win screens (BIG → MEGA → EPIC → LEGENDARY).
 - Each level relights the back alley (rain, searchlights, sirens, overload glow), with a music loop that speeds up as you level.
-- Reactors fly into the level meter; bonus buys spin in their Capture Cores with suspense on the last reels.
 - Player protection: session clock and net result, reality checks, autoplay with loss and win limits, game history,
   and no win celebration for a return at or below the stake.
 - Original hand-drawn SVG art in a back-alley sticker style, a lamp-lit brick-wall background and a phone layout.
@@ -33,20 +36,20 @@ engine against Python in your browser. Virtual credits only, no real-money play.
 
 | | Result |
 |---|---|
-| **RTP, exact base + simulated bonus** | **96.00% ± 0.04%** |
-| RTP, 10¹⁰ full-game spins | 95.97% ± 0.06% (z = −0.80) |
-| Bonus Hunt (3×) RTP, 2.5×10⁹ spins | 95.93% ± 0.09% (z = −1.23 vs exact parts) |
-| Override Spin (57.1×) RTP | 96.13% ± 0.01% (z = +1.03) |
-| Street Hunt buy (100×) RTP | 96.40% ± 0.13% |
-| Night Raid buy (289×) RTP | 96.11% ± 0.09% |
-| Lockdown buy (956×) RTP | 96.14% ± 0.05% |
+| **RTP, exact base + simulated bonus** | **96.00% ± 0.03%** |
+| RTP, 10¹⁰ full-game spins | 96.00% ± 0.05% (z = +0.29) |
+| Bonus Hunt (3×) RTP, 2.5×10⁹ spins | 95.99% ± 0.07% (z = −0.04 vs exact parts) |
+| Super Net Spin (57.1×) RTP | 96.14% ± 0.01% (z = +0.97) |
+| Street Hunt buy (100×) RTP | 96.28% ± 0.10% |
+| Night Raid buy (339×) RTP | 96.28% ± 0.08% |
+| Lockdown buy (1,405×) RTP | 96.16% ± 0.05% |
 | Hit frequency | 31.0% |
-| Volatility (SD per spin) | 28.5× bet (very high) |
+| Volatility (SD per spin) | 23.1× bet (very high) |
 | Bonus odds (3 / 4 / 5 Cores) | 1 in 342 / 1 in 9,140 / 1 in 610,574 spins |
-| Max win 10,000× | 1 in 535,590 spins |
+| Max win 10,000× | 1 in 552,486 spins |
 
 Full numbers: **[par sheet](docs/par_sheet.md)**. Design, rules and the iteration log:
-**[docs/design_spec.md](docs/design_spec.md)**. Market research behind the v0.4 features:
+**[docs/design_spec.md](docs/design_spec.md)**. Market research behind the feature set:
 **[docs/market_analysis.md](docs/market_analysis.md)**.
 
 ![RTP convergence](reports/rtp_convergence.png)
@@ -55,12 +58,12 @@ Full numbers: **[par sheet](docs/par_sheet.md)**. Design, rules and the iteratio
 ## How the RTP is proven
 
 - **Exact base game.** Reel stops are independent, so the expected ways win factorises into a product
-  of per-reel expectations, for each Static reveal and Override position. A brute-force pass over all
+  of per-reel expectations, for each Static reveal and Net position. A brute-force pass over all
   1.91 billion base-reel stop combinations matches it to ten decimal places.
 - **Bonus by Monte Carlo.** Each start level is simulated for 5×10⁷ rounds, with 95% confidence intervals.
 - **Independent full-game check.** 10¹⁰ complete rounds are played the way a player would play them,
-  and the result agrees with exact + bonus parts. Bonus Hunt and Override Spin are checked the same way.
-- **Unit tests** cover ways evaluation, crosses, reveals, level-ups, captures, locks and formula-vs-brute-force.
+  and the result agrees with exact + bonus parts. Bonus Hunt and Super Net Spin are checked the same way.
+- **Unit tests** cover ways evaluation, crosses, reveals, level-ups, catches, the multiplier, holds and formula-vs-brute-force.
 - **JS engine self-test** checks the browser engine against Python test vectors and by simulation.
 
 The simulator is NumPy + Numba, running on all CPU cores with a reproducible seed per chunk.
@@ -69,12 +72,12 @@ The simulator is NumPy + Numba, running on all CPU cores with a reproducible see
 
 ```
 src/bootleg_beasts/
-  config.py     symbols, paytable, bonus levels, captures, model loading
-  engine.py     Numba kernels: ways, reveals, Override drops, base spin, bonus round, batch simulators
+  config.py     symbols, paytable, bonus levels (catch values, holds), model loading
+  engine.py     Numba kernels: ways, reveals, Net drops, base spin, bonus round, batch simulators
   exact.py      exact base-game RTP (factorised) + brute-force full-cycle check
   sim.py        Python wrappers: run simulations, summarise, confidence intervals
   reelgen.py    builds reel strips from a symbol composition
-  model.json    the tuned model: reel strips, Override drop weights, reveal weights, buy prices
+  model.json    the tuned model: reel strips, Net drop weights, reveal weights, buy prices
 sims/
   tune.py       builds the reels and tunes drop rates to the RTP targets
   verify.py     runs all verifications, writes reports/results.json + convergence.csv
@@ -82,7 +85,7 @@ sims/
   export_web.py exports the model + JS test vectors for the browser demo
 web/            playable demo (vanilla JS, no build step), deployed by GitHub Pages
   engine.js     line-for-line port of engine.py
-  app.js        UI: reels, reveals, Override beams, captures, level meter, win presentation
+  app.js        UI: reels, reveals, nets, catches, multiplier and Core meters, win presentation
   symbols.js    the symbol art, hand-written SVG (sticker style)
   panels.js     splash, buy menu, autoplay, settings, history and reality-check dialogs
   screens.js    full-screen bonus intro, level-up and win screens

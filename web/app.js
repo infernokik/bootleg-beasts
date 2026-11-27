@@ -1,12 +1,12 @@
 // Bootleg Beasts: browser UI. Every outcome comes from engine.js, which uses the same reel strips,
 // weights and rules as the verified Python model (game-data.json).
-import { Game, CORE, REACTOR } from "./engine.js?v=13";
-import { symbolHTML } from "./symbols.js?v=13";
-import { Fx, shake, impact } from "./fx.js?v=13";
-import { startBackground } from "./background.js?v=13";
-import { sfx, music, isMuted, setMuted, audioPrefs, setAudioPrefs } from "./sfx.js?v=13";
-import { splash, buyMenu, autoplayMenu, settingsMenu, historyMenu, realityCheck } from "./panels.js?v=13";
-import { intro, levelUp, outro } from "./screens.js?v=13";
+import { Game, CORE, REACTOR } from "./engine.js?v=14";
+import { symbolHTML } from "./symbols.js?v=14";
+import { Fx, shake, impact } from "./fx.js?v=14";
+import { startBackground } from "./background.js?v=14";
+import { sfx, music, isMuted, setMuted, audioPrefs, setAudioPrefs } from "./sfx.js?v=14";
+import { splash, buyMenu, autoplayMenu, settingsMenu, historyMenu, realityCheck } from "./panels.js?v=14";
+import { intro, levelUp, outro } from "./screens.js?v=14";
 
 try {
   startBackground(document.getElementById("bg"));
@@ -24,14 +24,6 @@ const BETS = [0.2, 0.5, 1, 2, 5, 10, 20];
 const START_BALANCE = 1000;
 const REFILL = 10000;
 const BIG_WIN = 25; // x bet
-const LEVEL_SHORT = ["wild columns and beast captures", "bigger captures", "Override columns lock wild"];
-const LEVEL_TEXT = [
-  "Override Wilds turn their column wild · captured beasts add +1–2×",
-  "Captures hit harder · more +2× beasts",
-  "Override columns LOCK wild for the rest of the bonus · captures up to +3×",
-  "Full Override CROSSES · columns and Glitch Wilds LOCK · captures up to +3×",
-];
-
 const ICON = {
   auto: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"/><path d="M18 3v4h-4M6 21v-4h4"/><path class="fill" d="M10 9.5v5l4-2.5z"/></svg>',
   soundOn: '<svg viewBox="0 0 24 24"><path class="fill" d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>',
@@ -43,12 +35,14 @@ const $ = (id) => document.getElementById(id);
 const ui = {
   grid: $("grid"), wrap: document.querySelector(".grid-wrap"), ovl: $("ovl"), banner: $("banner"),
   bannerTitle: $("bannerTitle"), bannerSub: $("bannerSub"), winTag: $("winTag"), ticker: $("ticker"),
+  boardWin: $("boardWin"), winLabel: $("winLabel"), lvlRibbon: $("lvlRibbon"), hudRule: $("hudRule"),
+  hudCaught: $("hudCaught"), coreSlots: $("coreSlots"), spinsCard: $("spinsCard"), multCard: $("multCard"),
+  miniLadder: $("miniLadder"), trigCores: $("trigCores"),
   balance: $("balance"), win: $("win"), bet: $("bet"), spin: $("spinBtn"), betUp: $("betUp"),
   betDown: $("betDown"), turbo: $("turbo"), autoBtn: $("autoBtn"), buyBtn: $("buyBtn"), huntBtn: $("huntBtn"),
   spinStake: $("spinStake"), clock: $("clock"), sessTime: $("sessTime"), sessNet: $("sessNet"),
   historyBtn: $("historyBtn"), settingsBtn: $("settingsBtn"), rtpBadge: $("rtpBadge"), refill: $("refill"),
-  hud: $("hud"), hudName: document.querySelector(".hud-name"), hudLevel: $("hudLevel"), hudLvlNum: $("hudLvlNum"), pips: [...document.querySelectorAll(".pip")],
-  hudSpins: $("hudSpins"), hudMult: $("hudMult"), hudTotal: $("hudTotal"), info: $("info"),
+  hudLevel: $("hudLevel"), hudSpins: $("hudSpins"), hudMult: $("hudMult"), info: $("info"),
   infoBody: $("infoBody"), infoBtn: $("infoBtn"), mute: $("muteBtn"), sSpins: $("sSpins"),
   sBet: $("sBet"), sWon: $("sWon"), sRtp: $("sRtp"), repoLink: $("repoLink"),
 };
@@ -97,8 +91,8 @@ const bump = (el) => {
 
 // ---- Reels & overlay -----------------------------------------------------------------
 // Each reel is a window onto a strip of cells that scrolls during a spin. The overlay grid above
-// the reels holds everything that must not scroll: Override Wilds, wild columns and crosses,
-// locked wilds, captures and win frames.
+// the reels holds everything that must not scroll: Net Wilds, the base-game net cross and win
+// frames. Bonus nets sit inside their reel, over the scrolling strip.
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const fx = new Fx(ui.wrap);
 const reels = [];
@@ -147,44 +141,24 @@ function cellPitch() {
   return b.offsetTop - a.offsetTop;
 }
 
-function clearFx(keepSticky = false) {
+function clearFx() {
   ui.grid.classList.remove("has-win");
   ui.winTag.hidden = true;
-  for (const col of cells) for (const c of col) c.classList.remove("win", "land", "focus");
+  hideBoardWin();
+  for (const col of cells) for (const c of col) c.classList.remove("win", "land", "focus", "caught");
   for (const col of ocells) {
     for (const o of col) {
-      o.classList.remove("win", "wildcell", "ow-drop", "core-hit", "lock-in", "captured", "reactor-hit", "focus", "wm-on");
+      o.classList.remove("win", "wildcell", "ow-drop", "core-hit", "captured", "reactor-hit", "focus", "wm-on");
       o.style.removeProperty("--d");
-      if (!keepSticky) o.classList.remove("sticky", "ow-origin");
-      if (!o.classList.contains("sticky")) o.replaceChildren();
+      o.replaceChildren();
     }
   }
-}
-
-function renderSticky(sticky, origins, animate) {
-  let n = 0;
-  for (let r = 0; r < R; r++) {
-    for (let k = 0; k < K; k++) {
-      if (!sticky[r][k]) continue;
-      const o = ocells[r][k];
-      const origin = origins.some(([rr, kk]) => rr === r && kk === k);
-      if (!o.classList.contains("sticky") || o.classList.contains("ow-origin") !== origin) {
-        o.innerHTML = symbolHTML(origin ? "OW" : "W");
-        o.classList.add("sticky");
-        o.classList.toggle("ow-origin", origin);
-        if (animate) {
-          o.style.setProperty("--d", `${n++ * 45 * speed()}ms`);
-          o.classList.add("lock-in");
-        }
-      }
-    }
-  }
-  if (n) sfx.lock();
 }
 
 /** Spin all reels to `grid`. Reels stop left to right; in the base game, once two Capture Cores are
- *  showing, each remaining reel slows down and glows (the bonus tease). */
-async function spinReels(key, grid, stops, sticky) {
+ *  showing, each remaining reel slows down and glows (the bonus tease). Bonus nets stay put over
+ *  their reels while the symbols spin behind them. */
+async function spinReels(key, grid, stops, bonus = false) {
   sfx.spin();
   const pitch = cellPitch();
   const base = 560 * speed();
@@ -194,20 +168,19 @@ async function spinReels(key, grid, stops, sticky) {
   let cores = 0;
   const jobs = [];
   for (let r = 0; r < R; r++) {
-    const locked = !!sticky && sticky[r].every(Boolean);
-    const teasing = !sticky && !locked && cores >= 2;
+    const teasing = !bonus && cores >= 2;
     const hot = teasing && cores >= 3; // already a bonus: chasing a higher start level
     const stopAt = teasing ? prev + tease * (hot ? 1.45 : 1) : Math.max(base + r * stagger, prev + stagger);
-    jobs.push(spinReel(r, key, grid[r], stops[r], { stopAt, teasing, hot, teaseFrom: prev, locked }, pitch, sticky));
+    jobs.push(spinReel(r, key, grid[r], stops[r], { stopAt, teasing, hot, teaseFrom: prev }, pitch));
     prev = stopAt;
     for (let k = 0; k < K; k++) if (grid[r][k] === CORE) cores++;
   }
   await Promise.all(jobs);
 }
 
-function spinReel(r, key, col, stop, plan, pitch, sticky) {
+function spinReel(r, key, col, stop, plan, pitch) {
   const { el, strip } = reels[r];
-  if (plan.locked || reduceMotion) {
+  if (reduceMotion) {
     setColumn(r, col);
     return Promise.resolve();
   }
@@ -245,7 +218,7 @@ function spinReel(r, key, col, stop, plan, pitch, sticky) {
     sfx.reelStop(r);
     for (let k = 0; k < K; k++) {
       finals[k].classList.add("land");
-      if ((col[k] === CORE || col[k] === REACTOR) && !(sticky && sticky[r][k])) {
+      if (col[k] === CORE || col[k] === REACTOR) {
         if (col[k] === CORE) sfx.core();
         const [x, y] = fx.at(ocells[r][k]);
         const colors = ["#ffc531", "#fff1a8", "#ff8a3d"];
@@ -275,50 +248,29 @@ async function showReveal(reveal) {
   await sleep(450);
 }
 
-/** Override Wilds land; their column (shape 1) or cross (shape 2) turns wild. */
-async function showDrops(drops, shape, sticky) {
+/** Base game: a Net Wild lands and nets its whole row and column. */
+async function showDrops(drops) {
   for (const [r, k] of drops) {
     const o = ocells[r][k];
     o.innerHTML = symbolHTML("OW");
     o.classList.add("ow-drop");
-    tick(`<b>Override Wild</b> on reel ${r + 1}: its ${shape === 2 ? "whole row and column" : "column"} turns wild.`);
+    tick(`<b>Net Wild!</b> Its whole row and column turn wild.`);
     await sleep(280);
     sfx.override();
     const [x, y] = fx.at(o);
     fx.burst(x, y, { n: 50, speed: 7.5, size: 5, life: 50 });
     shake(ui.wrap, 9, 420);
     fx.beam(o, ui.grid, true);
-    if (shape === 2) fx.beam(o, ui.grid, false);
+    fx.beam(o, ui.grid, false);
     for (let rr = 0; rr < R; rr++) {
       for (let kk = 0; kk < K; kk++) {
-        const inShape = rr === r || (shape === 2 && kk === k);
-        if (!inShape || (rr === r && kk === k)) continue;
-        if (sticky && sticky[rr][kk]) continue;
+        if ((rr !== r && kk !== k) || (rr === r && kk === k)) continue;
         const cell = ocells[rr][kk];
         cell.style.setProperty("--d", `${(Math.abs(rr - r) + Math.abs(kk - k)) * 55 * speed()}ms`);
         cell.classList.add("wildcell");
       }
     }
     await sleep(600);
-  }
-}
-
-/** Captured beasts pop their multiplier one by one; the spin multiplier counts up. */
-async function showCaptures(captures) {
-  let mult = 1;
-  for (let i = 0; i < captures.length; i++) {
-    const c = captures[i];
-    mult += c.value;
-    const o = ocells[c.r][c.k];
-    o.classList.add("captured");
-    const [x, y] = fx.at(o);
-    fx.burst(x, y, { n: 26, colors: ["#ffc531", "#fff1a8", "#ff3b3b"], speed: 5, size: 4, life: 40 });
-    pop(`+${c.value}×`, x, y);
-    sfx.capture(i);
-    ui.hudMult.textContent = `×${mult}`;
-    bump(ui.hudMult);
-    tick(`<b>Captured ${NAMES[c.sym]}!</b> +${c.value}× → spin multiplier <b>×${mult}</b>`);
-    await sleep(380);
   }
 }
 
@@ -363,8 +315,10 @@ async function banner(title, sub, ms, cls = "") {
   ui.banner.hidden = true;
 }
 
-async function countBanner(title, amount, ms, cls = "") {
+async function countBanner(title, amount, ms, cls = "", note = "") {
   ui.bannerTitle.textContent = title;
+  ui.banner.querySelector(".banner-eq")?.remove();
+  if (note) ui.banner.insertAdjacentHTML("beforeend", `<div class="banner-eq">${note}</div>`);
   ui.banner.className = `banner ${cls}`;
   ui.banner.hidden = false;
   const dur = ms * 0.6 * speed();
@@ -445,8 +399,11 @@ async function showWins(lines, mult, winX, b, price = 1) {
   }
   tick(lines.slice(0, 2).map((l) => lineText(l, mult, b)).join(" &nbsp;|&nbsp; ") +
     (lines.length > 2 ? ` &nbsp;+${lines.length - 2} more` : ""));
-  await sleep(650);
-  if (lines.length > 1 && !autoOn()) {
+  if (winX < BIG_WIN) {
+    await boardWin(round2((winX / mult) * b), mult, round2(winX * b));
+    await sleep(350);
+  } else await sleep(650);
+  if (lines.length > 1 && !autoOn() && winX >= BIG_WIN) {
     for (const l of lines.slice(0, 4)) {
       const on = new Set(l.cells.map(([r, k]) => r * K + k));
       for (let r = 0; r < R; r++) {
@@ -473,29 +430,83 @@ async function showWins(lines, mult, winX, b, price = 1) {
     fx.fountain(winX >= 250 ? 220 : winX >= 100 ? 150 : 90);
     sfx.bigWin();
     const title = winX >= 1000 ? "LEGENDARY WIN" : winX >= 250 ? "EPIC WIN" : winX >= 100 ? "MEGA WIN" : "BIG WIN";
-    await countBanner(title, round2(winX * b), 2400, winX >= 100 ? "gold" : "");
+    const note = mult > 1 ? `${fmt(round2((winX / mult) * b))} × <b>${mult.toLocaleString()}</b> Catch Multiplier` : "";
+    await countBanner(title, round2(winX * b), 2400, winX >= 100 ? "gold" : "", note);
   } else {
     await sleep(300);
   }
 }
 
-// ---- Bonus HUD -----------------------------------------------------------------------
-/** A Reactor flies from its cell up into a meter pip, leaving a trail. */
-function flyReactor(r, k, pip) {
-  const from = ocells[r][k].getBoundingClientRect();
-  const to = pip.getBoundingClientRect();
+// ---- Bonus side panels -----------------------------------------------------------------
+const LOCK_SVG = '<svg viewBox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3h1.5v11h-13V10zm2.5 0h5V7a2.5 2.5 0 0 0-5 0z"/></svg>';
+
+/** One-line rule for a level, from the level data. */
+function ruleShort(i) {
+  const lv = data.levels[i];
+  const hold = lv.hold >= data.holdForever ? "nets lock for good"
+    : lv.hold ? `nets hold +${lv.hold} spin${lv.hold > 1 ? "s" : ""}` : "nets last 1 spin";
+  return `${lv.doubles ? "×2 on arrival · " : ""}+${lv.catch}× per catch · ${hold}`;
+}
+
+function renderLadder(level) {
+  ui.miniLadder.innerHTML = data.levels.map((lv, i) =>
+    `<li class="${i < level ? "done" : i === level ? "cur" : ""}"><b>${i + 1}</b><span>${lv.name}</span><small>${ruleShort(i)}</small></li>`).join("");
+}
+
+function hudLevel(level, pop = false) {
+  ui.hudLevel.textContent = data.levels[level].name;
+  ui.hudRule.textContent = ruleShort(level);
+  document.body.dataset.level = String(level);
+  renderLadder(level);
+  if (pop) {
+    ui.lvlRibbon.classList.remove("pop");
+    void ui.lvlRibbon.offsetWidth;
+    ui.lvlRibbon.classList.add("pop");
+  }
+}
+
+function setSpins(n, cls = "bump") {
+  if (ui.hudSpins.textContent === String(n) && cls === "bump") return;
+  ui.hudSpins.textContent = n;
+  ui.hudSpins.classList.remove("bump", "plus");
+  void ui.hudSpins.offsetWidth;
+  ui.hudSpins.classList.add(cls);
+}
+
+function setMult(m, cls = "bump") {
+  ui.hudMult.textContent = `×${m.toLocaleString()}`;
+  ui.hudMult.classList.remove("bump", "slam");
+  void ui.hudMult.offsetWidth;
+  ui.hudMult.classList.add(cls);
+}
+
+function setCoreSlots(n) {
+  const top = n < 0;
+  [...ui.coreSlots.children].forEach((slot, i) => {
+    const on = top || i < n;
+    if (on && !slot.classList.contains("on")) slot.innerHTML = symbolHTML("R");
+    if (!on) slot.replaceChildren();
+    slot.classList.toggle("on", on);
+  });
+  ui.spinsCard.classList.toggle("charged", n === data.reactorsPerLevel - 1);
+}
+
+/** A ghost of a symbol flies from a cell to a target element along an arc, leaving a trail. */
+function fly(fromEl, toEl, code, cls = "", ms = 620) {
+  const from = fromEl.getBoundingClientRect();
+  const to = toEl.getBoundingClientRect();
   const ghost = document.createElement("div");
-  ghost.className = "fly";
-  ghost.innerHTML = symbolHTML("R");
+  ghost.className = `fly ${cls}`;
+  ghost.innerHTML = symbolHTML(code);
   Object.assign(ghost.style, { left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px` });
   document.body.appendChild(ghost);
   const dx = to.left + to.width / 2 - (from.left + from.width / 2);
   const dy = to.top + to.height / 2 - (from.top + from.height / 2);
   const anim = ghost.animate([
     { transform: "translate(0, 0) scale(1) rotate(0deg)" },
-    { transform: `translate(${dx * 0.3}px, ${dy * 0.3 - 70}px) scale(.85) rotate(80deg)`, offset: 0.35 },
-    { transform: `translate(${dx}px, ${dy}px) scale(.12) rotate(300deg)` },
-  ], { duration: (reduceMotion ? 120 : 620) * speed(), easing: "cubic-bezier(.45,0,.8,.45)", fill: "forwards" });
+    { transform: `translate(${dx * 0.3}px, ${dy * 0.3 - 90}px) scale(1.15) rotate(-25deg)`, offset: 0.35 },
+    { transform: `translate(${dx}px, ${dy}px) scale(.18) rotate(160deg)` },
+  ], { duration: (reduceMotion ? 120 : ms) * speed(), easing: "cubic-bezier(.45,0,.8,.45)", fill: "forwards" });
   const trail = setInterval(() => {
     const g = ghost.getBoundingClientRect();
     const d = document.createElement("i");
@@ -511,49 +522,190 @@ function flyReactor(r, k, pip) {
   });
 }
 
-function setCharged(n) {
-  ui.hudName.classList.toggle("charged", n === data.reactorsPerLevel - 1);
+/** Pop text over the multiplier card. */
+function cardPop(text) {
+  const el = document.createElement("div");
+  el.className = "cap-pop";
+  el.textContent = text;
+  ui.multCard.appendChild(el);
+  setTimeout(() => el.remove(), 1100);
 }
 
-function hudLevel(level) {
-  const lv = data.levels[level];
-  ui.hudLevel.textContent = lv.name;
-  ui.hudLvlNum.textContent = `LVL ${level + 1}`;
-  document.body.dataset.level = String(level);
+// ---- Nets ------------------------------------------------------------------------------
+/** Show reel r's net with `t` spins of hold left after this one (0 = none). */
+function setNet(r, t, { drop = false, row = 0 } = {}) {
+  const reel = reels[r].el;
+  let n = reel.querySelector(".net:not(.leaving)");
+  if (t <= 0 && !drop) {
+    if (n) {
+      n.classList.add("leaving");
+      setTimeout(() => n.remove(), 420 * speed());
+    }
+    reel.classList.remove("netted");
+    return;
+  }
+  if (!n) {
+    n = document.createElement("div");
+    n.className = "net";
+    n.innerHTML = '<span class="hold"></span>';
+    reel.appendChild(n);
+  }
+  if (drop) {
+    n.style.setProperty("--from", `${row * 20}%`);
+    n.classList.remove("drop");
+    void n.offsetWidth;
+    n.classList.add("drop");
+  }
+  const forever = t >= data.holdForever;
+  n.classList.toggle("forever", forever);
+  const h = n.querySelector(".hold");
+  const label = forever ? LOCK_SVG : String(t);
+  if (h.innerHTML !== label) {
+    h.innerHTML = label;
+    h.classList.remove("tick");
+    void h.offsetWidth;
+    h.classList.add("tick");
+  }
+  h.hidden = !forever && t <= 0;
+  reel.classList.add("netted");
 }
 
-function hudPips(n, top) {
-  ui.pips.forEach((p, i) => p.classList.toggle("on", top || i < n));
+function clearNets() {
+  for (const { el } of reels) {
+    el.querySelectorAll(".net").forEach((n) => n.remove());
+    el.classList.remove("netted");
+  }
+}
+
+/** A Net Wild slams onto its cell and the net unrolls over the whole reel; then every beast on
+ *  that reel is caught and flies into the Catch Multiplier. */
+async function showNet([r, k], hold, captures, catchIndex) {
+  const o = ocells[r][k];
+  o.innerHTML = symbolHTML("OW");
+  o.classList.add("ow-drop");
+  tick(`<b>Net Wild</b> on reel ${r + 1}: the whole reel turns wild.`);
+  await sleep(300);
+  sfx.override();
+  const [x, y] = fx.at(o);
+  fx.burst(x, y, { n: 46, speed: 7.5, size: 5, life: 50 });
+  shake(ui.wrap, 8, 380);
+  setNet(r, hold, { drop: true, row: k });
+  await sleep(380);
+  o.classList.remove("ow-drop");
+  o.replaceChildren();
+  for (const c of captures) {
+    const cell = cells[c.r][c.k];
+    cell.classList.remove("caught");
+    void cell.offsetWidth;
+    cell.classList.add("caught");
+    sfx.capture(Math.min(catchIndex.n, 12));
+    const [cx, cy] = fx.at(ocells[c.r][c.k]);
+    fx.burst(cx, cy, { n: 16, colors: ["#fff", "#ffd21f", "#ff3b3b"], speed: 4, size: 4, life: 32 });
+    catchIndex.n++;
+    const flight = fly(ocells[c.r][c.k], ui.hudMult, CODES[c.sym], "beast", 560).then(() => {
+      setMult(c.mult);
+      cardPop(`+${c.value}×`);
+      ui.multCard.classList.remove("hit");
+      void ui.multCard.offsetWidth;
+      ui.multCard.classList.add("hit");
+      ui.hudCaught.textContent = String(Number(ui.hudCaught.textContent) + 1);
+    });
+    await sleep(170);
+    if (c === captures[captures.length - 1]) await flight;
+  }
+  if (captures.length) {
+    tick(`<b>Caught ${captures.length} beast${captures.length > 1 ? "s" : ""}!</b> Catch Multiplier <b>×${captures[captures.length - 1].mult}</b>`);
+    await sleep(200);
+  }
+}
+
+/** Overload: the multiplier doubles and every net on screen locks for good. */
+async function showDouble(mult, timers) {
+  sfx.bigWin();
+  shake(ui.wrap, 12, 600);
+  ui.hudMult.textContent = "×2";
+  ui.hudMult.classList.remove("bump", "slam");
+  void ui.hudMult.offsetWidth;
+  ui.hudMult.classList.add("slam");
+  await sleep(700);
+  setMult(mult, "slam");
+  const [x, y] = fx.at(ui.wrap);
+  fx.burst(x, y * 0.4, { n: 90, speed: 9, size: 6, life: 70 });
+  timers.forEach((t, r) => t > 0 && setNet(r, t));
+  tick(`<b>OVERLOAD!</b> Catch Multiplier doubled to <b>×${mult}</b>${timers.some((t) => t > 0) ? " and every net locks for good" : ""}.`);
+  await sleep(900);
+}
+
+// ---- Board win counter -----------------------------------------------------------------
+/** The win counts up in the middle of the board; in the bonus it shows ways win × multiplier. */
+async function boardWin(baseAmount, mult, amount) {
+  const el = ui.boardWin;
+  el.innerHTML = (mult > 1 ? `<span class="bw-eq">${fmt(baseAmount)} <em>× ${mult.toLocaleString()}</em></span>` : "") +
+    `<span class="bw-amt">${fmt(mult > 1 ? baseAmount : 0)}</span>`;
+  el.classList.remove("out");
+  el.hidden = false;
+  const amt = el.querySelector(".bw-amt");
+  if (mult > 1) {
+    await sleep(380);
+    el.querySelector("em").classList.add("slam");
+    sfx.capture(6);
+  }
+  const from = mult > 1 ? baseAmount : 0;
+  const dur = Math.min(1200, 380 + Math.sqrt(amount / bet()) * 90) * speed();
+  const t0 = performance.now();
+  let lastCoin = 0;
+  await new Promise((res) => {
+    const f = (now) => {
+      const p = Math.min(1, (now - t0) / dur);
+      amt.textContent = fmt(from + (amount - from) * (1 - (1 - p) ** 3));
+      if (now - lastCoin > 80 && p < 1) {
+        sfx.coin();
+        lastCoin = now;
+      }
+      if (p < 1) requestAnimationFrame(f);
+      else res();
+    };
+    requestAnimationFrame(f);
+  });
+}
+
+function hideBoardWin() {
+  if (ui.boardWin.hidden) return;
+  ui.boardWin.classList.add("out");
+  setTimeout(() => {
+    ui.boardWin.hidden = true;
+    ui.boardWin.classList.remove("out");
+  }, 250 * speed());
 }
 
 // ---- Game flow -------------------------------------------------------------------
 async function runBonus(startLevel, cap) {
   const st = game.startBonus(startLevel, cap);
   const b = bet();
-  const origins = [];
   let meterShown = 0;
   document.body.classList.add("in-bonus");
-  ui.hud.hidden = false;
   hudLevel(startLevel);
-  hudPips(0, false);
-  ui.hudSpins.textContent = st.spinsLeft;
-  ui.hudMult.textContent = "×1";
-  ui.hudTotal.textContent = fmt(0);
-  setCharged(0);
+  setSpins(st.spinsLeft);
+  setMult(1);
+  ui.hudCaught.textContent = "0";
+  setCoreSlots(0);
+  clearNets();
+  ui.winLabel.textContent = "Bonus win";
+  setWin(0);
   sfx.bonus();
   await impact(600);
   music.start(startLevel);
   await intro({ levels: data.levels, level: startLevel, spins: data.freeSpins, perLevel: data.reactorsPerLevel,
-    levelUpSpins: data.levelUpSpins, speed: speed(), auto: autoOn() });
+    levelUpSpins: data.levelUpSpins, rules: data.levels.map((_, i) => ruleShort(i)), speed: speed(), auto: autoOn() });
   clearFx();
   while (!st.done) {
-    clearFx(true);
+    clearFx();
+    hideBoardWin();
     const res = game.bonusSpin(st);
-    ui.hudSpins.textContent = st.spinsLeft - res.levelUps * data.levelUpSpins + (st.done ? 0 : 0);
-    ui.hudMult.textContent = "×1";
-    await spinReels("bonus", res.landed, res.stops, res.stickyBefore);
+    setSpins(st.spinsLeft - res.levelUps * data.levelUpSpins);
+    await spinReels("bonus", res.landed, res.stops, true);
 
-    // Reactors fill the meter
+    // Capture Cores fly into the meter
     const top = res.levelBefore >= data.levels.length - 1;
     const before = meterShown;
     await Promise.all(res.reactorCells.map(async ([r, k], i) => {
@@ -561,64 +713,63 @@ async function runBonus(startLevel, cap) {
       await sleep(i * 170);
       sfx.reactor(i);
       if (top) return;
-      const pip = ui.pips[Math.min(before + i, data.reactorsPerLevel - 1)];
-      await flyReactor(r, k, pip);
+      const slot = ui.coreSlots.children[Math.min(before + i, data.reactorsPerLevel - 1)];
+      await fly(ocells[r][k], slot, "R");
       meterShown++;
-      hudPips(Math.min(meterShown, 3), false);
-      bump(pip);
-      setCharged(meterShown);
+      setCoreSlots(Math.min(meterShown, data.reactorsPerLevel));
     }));
     if (res.reactorCells.length) await sleep(160);
     await showReveal(res.reveal);
-    if (res.drops.length) {
-      await showDrops(res.drops, res.shape, res.stickyBefore);
-      if (res.captures.length) await showCaptures(res.captures);
-      if (data.levels[res.levelBefore].stickyCrosses) origins.push(...res.drops);
+
+    // Nets and catches
+    const lv = data.levels[res.levelBefore];
+    const catchIndex = { n: 0 };
+    for (const d of res.drops) {
+      const hold = lv.hold >= data.holdForever ? data.holdForever : lv.hold;
+      await showNet(d, hold, res.captures.filter((c) => c.r === d[0]), catchIndex);
     }
-    if (res.spinWin > 0) await showWins(res.lines, res.spinMult, res.spinWin, b);
+
+    if (res.spinWin > 0) await showWins(res.lines, res.spinMult, res.spinWin, b, 1);
     else {
       tick(`Free spin ${st.played}: no win.`);
       await sleep(380);
     }
-    ui.hudTotal.textContent = fmt(round2(st.total * b)); // only after the win is shown
-    if (res.newSticky.length || (res.drops.length && data.levels[res.levelBefore].stickyCrosses)) {
-      clearFx(true);
-      renderSticky(st.sticky, origins, true);
-      const lockedCol = res.drops.length && data.levels[res.levelBefore].stickyCrosses;
-      tick([lockedCol && "Override column <b>locked wild</b>", res.newSticky.length && "Glitch Wilds <b>locked</b>"]
-        .filter(Boolean).join(" · ") + " for the rest of the bonus.");
-      await sleep(650);
-    }
+    setWin(round2(st.total * b)); // only after the win is shown
+
+    // Holds count down; expired nets leave
+    res.timerDecayed.forEach((t, r) => setNet(r, t));
     // Level-ups
+    if (res.levelUps) hideBoardWin();
     for (let u = 0; u < res.levelUps; u++) {
       const lvl = res.levelBefore + u + 1;
       meterShown = Math.max(0, meterShown - data.reactorsPerLevel);
-      hudPips(meterShown, false);
-      setCharged(meterShown);
+      setCoreSlots(meterShown);
       sfx.levelUp();
       await impact(500);
-      hudLevel(lvl);
+      hudLevel(lvl, true);
       music.setLevel(lvl);
-      ui.hudSpins.textContent = st.spinsLeft - (res.levelUps - u - 1) * data.levelUpSpins;
-      await levelUp({ levels: data.levels, level: lvl, levelUpSpins: data.levelUpSpins,
+      setSpins(st.spinsLeft - (res.levelUps - u - 1) * data.levelUpSpins, "plus");
+      await levelUp({ levels: data.levels, level: lvl, levelUpSpins: data.levelUpSpins, rules: data.levels.map((_, i) => ruleShort(i)),
         speed: speed(), auto: autoOn() });
+      if (data.levels[lvl].doubles) await showDouble(st.mult, res.timerAfter);
     }
-    if (st.level >= data.levels.length - 1) hudPips(3, true);
-    ui.hudSpins.textContent = st.spinsLeft;
+    if (st.level >= data.levels.length - 1) setCoreSlots(-1);
+    setSpins(st.spinsLeft);
   }
+  hideBoardWin();
   if (st.floored) {
     tick(`Guaranteed minimum win: bonus topped up to <b>${fmt(round2(st.total * b))}</b>.`);
-    ui.hudTotal.textContent = fmt(round2(st.total * b));
+    setWin(round2(st.total * b));
     await sleep(900);
   }
   music.stop();
   await outro({ levels: data.levels, level: st.level, totalX: st.total, bet: b, floored: st.floored, fmt, sfx,
-    speed: speed(), auto: autoOn() });
-  setCharged(0);
+    mult: st.mult, caught: st.caught, speed: speed(), auto: autoOn() });
   music.start(-1);
   document.body.classList.remove("in-bonus");
   delete document.body.dataset.level;
-  ui.hud.hidden = true;
+  ui.winLabel.textContent = "Win";
+  clearNets();
   clearFx();
   return st;
 }
@@ -630,7 +781,7 @@ async function maxWinBanner(b) {
   await banner("MAX WIN", `${fmt(round2(data.maxWin * b))} · ${data.maxWin.toLocaleString()}× bet`, 3000, "gold");
 }
 
-/** Base-game Glitch Wilds show their multipliers one by one. */
+/** Base-game Tag Wilds show their multipliers one by one. */
 async function showWildMults(list) {
   for (const [i, [r, k, m]] of list.entries()) {
     const o = ocells[r][k];
@@ -701,9 +852,9 @@ async function playRound({ mode, price, forceOverride = false, label }) {
   clearFx();
 
   const res = game.baseSpin({ mode, forceOverride });
-  await spinReels(mode, res.landed, res.stops, null);
+  await spinReels(mode, res.landed, res.stops);
   await showReveal(res.reveal);
-  if (res.drops.length) await showDrops(res.drops, 2, null);
+  if (res.drops.length) await showDrops(res.drops);
   if (res.wildMults.length) await showWildMults(res.wildMults);
   let totalX = res.win;
   let note = forceOverride ? label : "";
@@ -745,10 +896,10 @@ async function openBuyMenu() {
   const s = data.stats || {};
   const items = [
     { key: data.featureSpin.key, name: data.featureSpin.name, price: data.featureSpin.price, icon: "OW", vol: 2,
-      text: "One base spin with a guaranteed Override Wild cross.", rtp: s.featureSpin?.rtp },
+      text: "One base spin with a guaranteed Net Wild: its whole row and column turn wild.", rtp: s.featureSpin?.rtp },
     ...data.buys.map((bb) => ({
       key: bb.key, name: bb.name, price: bb.price, icon: "S", level: bb.startLevel, vol: 3 + bb.startLevel,
-      text: `${data.freeSpins} free spins starting on level ${bb.startLevel + 1}: ${LEVEL_SHORT[bb.startLevel]}.`,
+      text: `${data.freeSpins} free spins on level ${bb.startLevel + 1}: ${ruleShort(bb.startLevel)}.`,
       rtp: s.buyRtp?.[bb.key], min: data.minBonusWin[bb.startLevel],
     })),
   ];
@@ -805,7 +956,7 @@ async function buySpin(n) {
   }
   const landed = grid.map((c) => c.slice());
   const reveal = game.revealStatic(grid, null, "base");
-  await spinReels("base", landed, stops, null);
+  await spinReels("base", landed, stops);
   await showReveal(reveal);
   coreHit(grid);
   sfx.core();
@@ -844,35 +995,38 @@ function buildInfo() {
     <p>The base game is calculated exactly; the bonus is simulated tens of millions of times, and the
     whole game billions of times as an independent check, in every mode. <a href="selftest.html">Run the engine self-test.</a></p>
     <h3>Paytable (bet ${fmt(b)}, pays per way)</h3>
-    <p>The four beasts pay the most, then the bootleg merch.</p>
+    <p>The four beasts pay the most, then the bootleg merch. In the bonus, the beasts are what the Nets catch.</p>
     <table><thead><tr><th>Symbol</th><th>3</th><th>4</th><th>5</th></tr></thead><tbody>${rows}</tbody></table>
     <h3>Base game features</h3>
     <ul>
       <li><b>Static</b>: after every spin, all Static TVs on screen reveal the <b>same</b> random symbol (sometimes a Wild).</li>
-      <li><b>Glitch Wild</b> (reels 2–5) substitutes for every paying symbol. In the base game every Glitch Wild
+      <li><b>Tag Wild</b> (reels 2–5) substitutes for every paying symbol. In the base game every Tag Wild
       carries a <b>×2, ×3 or ×5</b> multiplier (weights ${data.wildMults.weights.join(" : ")}). A wild counts as that many
-      ways, so multipliers on the same win <b>multiply together</b>. Wilds revealed by Static and wilds under an
-      Override Wild count once (no multiplier).</li>
-      <li><b>Override Wild</b> drops onto reels 2–4; its whole row and column turn wild.</li>
+      ways, so multipliers on the same win <b>multiply together</b>. Wilds revealed by Static and wilds under a
+      Net count once (no multiplier).</li>
+      <li><b>Net Wild</b> drops onto reels 2–4; its whole row and column turn wild.</li>
       <li><b>3, 4 or 5 Capture Cores</b> start the bonus on level 1, 2 or 3.</li>
     </ul>
-    <h3>The bonus: level up by collecting Reactors</h3>
-    <p>${data.freeSpins} free spins. Every <b>${data.reactorsPerLevel} Reactors</b> collected = next level + ${data.levelUpSpins} spins.
-    When an Override Wild lands, every <b>beast</b> it covers is <b>captured</b> and adds a random amount to that
-    spin's multiplier; several captures stack.</p>
+    <h3>The bonus: catch the beasts</h3>
+    <p>${data.freeSpins} free spins. On any free spin a <b>Net Wild</b> can drop onto reel 2, 3 or 4, even onto a reel
+    that is already netted. Its <b>whole reel turns wild</b>, and every <b>beast</b> on that reel is <b>caught</b>: each
+    catch adds to the <b>Catch Multiplier</b>. The Catch Multiplier starts at ×1, <b>never resets</b>, and multiplies
+    every win in the bonus.</p>
+    <p>Capture Cores land in the bonus too: every <b>${data.reactorsPerLevel} Cores</b> = next level + ${data.levelUpSpins} spins.
+    Higher levels drop more Nets.</p>
     <ol>
-      ${lv.map((l, i) => `<li><b>${l.name}</b>: ${LEVEL_TEXT[i]}.</li>`).join("")}
+      ${lv.map((l, i) => `<li><b>${l.name}</b>: ${ruleShort(i)}; Net chance ${pct(l.netChance, 0)} per spin.</li>`).join("")}
     </ol>
-    <p>Guaranteed minimum bonus win: ${data.minBonusWin.slice(0, 3).map((m, i) => `${m}× from level ${i + 1}`).join(", ")}.
-    Locked cells hide whatever lands under them.</p>
+    <p>A held net keeps its reel wild for that many more spins (the number on the net). Guaranteed minimum bonus win:
+    ${data.minBonusWin.slice(0, 3).map((m, i) => `${m}× from level ${i + 1}`).join(", ")}.</p>
     <h3>Bonus Hunt</h3>
     <p>Optional. Each spin costs <b>${data.ante.price}× bet</b> and plays on reels with extra Capture Cores: the bonus comes
     about 1 in ${s.ante?.p_trigger ? Math.round(1 / s.ante.p_trigger[0]) : 70} spins instead of 1 in ${s.triggerOdds ? Math.round(s.triggerOdds[0]) : 342}.
     Wins are paid on the bet, not the ante. RTP ${s.ante?.rtp ? pct(s.ante.rtp) : "96%"}.</p>
     <h3>Buy feature</h3>
-    <p><b>${data.featureSpin.name}</b> (${data.featureSpin.price}× bet): one base spin with a guaranteed Override Wild cross.<br>
+    <p><b>${data.featureSpin.name}</b> (${data.featureSpin.price}× bet): one base spin with a guaranteed Net Wild cross.<br>
     ${data.buys.map((bb) => `<b>${bb.name}</b>: ${bb.price}× bet, starts on level ${bb.startLevel + 1}`).join(" · ")}.
-    Overload can only be reached by collecting Reactors.</p>
+    Overload can only be reached by collecting Capture Cores in the bonus.</p>
     <h3>Max win</h3>
     <p>Maximum win <b>${data.maxWin.toLocaleString()}× bet</b> per round (base spin plus any bonus it triggers);
     the round ends as soon as it's reached${s.maxWinOdds ? `, about 1 in ${Math.round(s.maxWinOdds).toLocaleString()} spins` : ""}.
@@ -973,6 +1127,7 @@ setInterval(async () => {
     if (!go) tick("Taking a break. Your balance is saved; come back any time.");
   }
 }, 1000);
+ui.trigCores.innerHTML = symbolHTML("S").repeat(3);
 if (data.stats?.rtp) ui.rtpBadge.textContent = `RTP ${(100 * data.stats.rtp).toFixed(2)}%`;
 
 // First screen: a random base-game window with the Static already revealed, no animation.
@@ -1009,7 +1164,7 @@ if (new URLSearchParams(location.search).has("debug")) {
       S.busy = false;
       render();
     },
-    /** Force an Override Wild on every base spin (true) or restore the real odds (false). */
+    /** Force a Net Wild on every base spin (true) or restore the real odds (false). */
     forceOverride(on = true) {
       game.cum.base = on ? [0, 1, 1] : baseCum;
     },

@@ -2,11 +2,11 @@
 
 Order of work (each step only depends on the ones before it):
   1. Build base and bonus reel strips from the compositions below (fixed seeds, so reproducible).
-  2. Bonus: find the level-1 Override Wild drop chance that makes the 100x Bonus buy return the
+  2. Bonus: find the level-1 Net Wild drop chance that makes the 100x Bonus buy return the
      target RTP (bisection on Monte Carlo with common random numbers, then a secant step). Every
      level's drop chance is that times the level's factor.
   3. Super Bonus price: its simulated mean payout / target RTP, rounded to a whole number.
-  4. Base Override drop rate, exact: base RTP is linear in it, so solve
+  4. Base Net drop rate, exact: base RTP is linear in it, so solve
      (1 - q) * E0 + q * E1 = 96% - sum over starting levels of P(trigger) * E[bonus payout].
   5. Save the model to src/bootleg_beasts/model.json.
 
@@ -35,12 +35,17 @@ PAYING = {
 # Static (mystery) stacks: every Static on screen reveals the same symbol, so stacks on several
 # reels line up into big ways wins.
 BASE_STACKS = PAYING | {"X": [2, 2]}
-BONUS_STACKS = PAYING | {"X": [3, 3, 3, 2]}
+# Bonus reels: fewer beasts (each one a Net catches is worth a lot) and more low symbols.
+BONUS_STACKS = {
+    "H1": [2], "H2": [2], "H3": [2, 1], "H4": [2, 1],
+    "L1": [3, 3, 2, 2], "L2": [3, 3, 2, 2], "L3": [3, 3, 2, 2], "L4": [3, 2, 2, 2], "L5": [3, 2, 2, 2],
+    "X": [2, 2, 2],
+}
 # (stacks, singles per reel, seed)
 REEL_SETS = {
     "base": (BASE_STACKS, [{"S": 1}] + [{"W": 1, "S": 1}] * 4, 11),
-    # Reactors on reels 1-4, one Glitch Wild on reels 2-5
-    "bonus": (BONUS_STACKS, [{"R": 1}] + [{"W": 1, "R": 1}] * 3 + [{"W": 1}], 101),
+    # one bonus Capture Core on reels 2-4, one Tag Wild on reels 2-5
+    "bonus": (BONUS_STACKS, [{}] + [{"W": 1, "R": 1}] * 3 + [{"W": 1}], 101),
     # Bonus Hunt (ante): the base composition with two Capture Cores on reels 1-4 (kept 5+ stops
     # apart, so still at most one per window) and one on reel 5: about 5x the bonus odds
     "hunt": (BASE_STACKS, [{"S": 2}] + [{"W": 1, "S": 2}] * 3 + [{"W": 1, "S": 1}], 11),
@@ -61,11 +66,11 @@ def weights(q: float) -> list[int]:
 
 
 def level_weights(q: float) -> dict:
-    return {lv.key: weights(q * lv.override_factor) for lv in LEVELS}
+    return {lv.key: weights(q * lv.net_factor) for lv in LEVELS}
 
 
 def level_cum(q: float) -> np.ndarray:
-    return np.stack([np.cumsum(np.array(weights(q * lv.override_factor), dtype=np.int64)) for lv in LEVELS])
+    return np.stack([np.cumsum(np.array(weights(q * lv.net_factor), dtype=np.int64)) for lv in LEVELS])
 
 
 def bonus_ev(model, q, rounds, seed, start_level=0):
@@ -74,7 +79,7 @@ def bonus_ev(model, q, rounds, seed, start_level=0):
 
 def tune_bonus(model, target_ev, lo=0.0, hi=0.9):
     if bonus_ev(model, 0.0, 1_000_000, 777) >= target_ev:
-        raise SystemExit("bonus is worth more than the target even without natural Override drops")
+        raise SystemExit("bonus is worth more than the target even without any Net drops")
     for _ in range(16):
         mid = 0.5 * (lo + hi)
         if bonus_ev(model, mid, 1_000_000, 777) < target_ev:
@@ -95,15 +100,15 @@ def tune_bonus(model, target_ev, lo=0.0, hi=0.9):
 def main() -> None:
     t0 = time.perf_counter()
     reels = {key: build_reels(*spec) for key, spec in REEL_SETS.items()}
-    model = Model("0.3", reels, {"base": weights(0.0)} | level_weights(0.0), REVEAL_WEIGHTS,
+    model = Model("0.5", reels, {"base": weights(0.0)} | level_weights(0.0), REVEAL_WEIGHTS,
                   {BUYS[0].key: BONUS_PRICE})
     for key, rs in reels.items():
         print(f"Reel lengths {key:6s} {rs.lens.tolist()}")
 
     q = tune_bonus(model, TARGET_BUY_RTP * BONUS_PRICE)
     model.override_weights |= level_weights(q)
-    print(f"Override drop chance per free spin: level 1 {q:.4f}, " +
-          ", ".join(f"{lv.name} {q * lv.override_factor:.4f}" for lv in LEVELS[1:]))
+    print(f"Net drop chance per free spin: level 1 {q:.4f}, " +
+          ", ".join(f"{lv.name} {q * lv.net_factor:.4f}" for lv in LEVELS[1:]))
 
     evs, cis = [], []
     for lvl, lv in enumerate(LEVELS):
@@ -111,7 +116,8 @@ def main() -> None:
         evs.append(r["mean_win"])
         cis.append(r["ci95"])
         print(f"  start at {lv.name:12s} mean payout {r['mean_win']:8.2f}x +/- {r['ci95']:.2f}  "
-              f"sd {r['std']:.0f}  final level shares {np.round(r['final_level_share'], 3).tolist()}")
+              f"sd {r['std']:.0f}  nets {r['avg_overrides']:.1f}  mult x{r['avg_final_mult']:.1f}  "
+              f"max {r['p_max_win']:.4f}  final {np.round(r['final_level_share'], 3).tolist()}")
     for b in BUYS[1:]:
         model.buy_prices[b.key] = float(round(evs[b.start_level] / TARGET_BUY_RTP))
         print(f"{b.name} buy price {model.buy_prices[b.key]:.0f}x "
@@ -122,21 +128,21 @@ def main() -> None:
     bonus_rtp = float(p_trig @ np.array(evs[:3]))
     e0, e1 = ex["rtp_no_override"], ex["mean_win_one_override"]
     q_base = (TARGET_RTP - bonus_rtp - e0) / (e1 - e0)
-    print(f"Base, exact: no-Override RTP {e0:.4%}, one-Override mean {e1:.1f}x, "
+    print(f"Base, exact: no-Net RTP {e0:.4%}, one-Net mean {e1:.1f}x, "
           f"bonus odds 1 in {1 / p_trig[0]:,.0f} / {1 / p_trig[1]:,.0f} / {1 / p_trig[2]:,.0f}")
     if not 0 < q_base < 0.05:
         raise SystemExit(f"base drop rate {q_base:.5f} is out of range: change the base reels")
     model.override_weights["base"] = weights(q_base)
     ex = exact.base_game_exact(model)
     ci = float(np.sqrt(np.sum((p_trig * np.array(cis[:3])) ** 2)))
-    print(f"Base Override drop: 1 in {1 / q_base:,.0f} spins")
+    print(f"Base Net drop: 1 in {1 / q_base:,.0f} spins")
     print(f"RTP = base {ex['rtp_base_ways']:.4%} (exact) + bonus {bonus_rtp:.4%} = "
           f"{ex['rtp_base_ways'] + bonus_rtp:.4%} +/- {ci:.4%}")
-    # Override Spin: guaranteed cross; EV = exact mean win with one Override + the usual bonus part
+    # Net Spin: guaranteed cross; EV = exact mean win with one Net + the usual bonus part
     ev_fs = ex["mean_win_one_override"] + bonus_rtp
     model.buy_prices[FEATURE_KEY] = float(round(ev_fs / TARGET_BUY_RTP, 1))
-    print(f"Override Spin price {model.buy_prices[FEATURE_KEY]:.1f}x (RTP {ev_fs / model.buy_prices[FEATURE_KEY]:.3%})")
-    # Bonus Hunt ante: fixed price; solve its own Override rate exactly so it returns TARGET_RTP
+    print(f"Net Spin price {model.buy_prices[FEATURE_KEY]:.1f}x (RTP {ev_fs / model.buy_prices[FEATURE_KEY]:.3%})")
+    # Bonus Hunt ante: fixed price; solve its own Net rate exactly so it returns TARGET_RTP
     model.override_weights[ANTE_KEY] = weights(0.0)
     exh = exact.base_game_exact(model, reel_key=ANTE_KEY)
     ph = np.array(exh["p_trigger"])
@@ -149,7 +155,7 @@ def main() -> None:
     model.buy_prices[ANTE_KEY] = ANTE_PRICE
     exh = exact.base_game_exact(model, reel_key=ANTE_KEY)
     print(f"Bonus Hunt ({ANTE_PRICE:g}x bet): bonus odds 1 in {1 / ph[0]:,.0f} / {1 / ph[1]:,.0f} / "
-          f"{1 / ph[2]:,.0f}, Override 1 in {1 / q_h:,.0f} spins, RTP "
+          f"{1 / ph[2]:,.0f}, Net 1 in {1 / q_h:,.0f} spins, RTP "
           f"{(exh['rtp_base_ways'] + bonus_h) / ANTE_PRICE:.4%}")
     model.save(MODEL_PATH)
     print(f"Saved {MODEL_PATH}  ({time.perf_counter() - t0:.0f}s)")

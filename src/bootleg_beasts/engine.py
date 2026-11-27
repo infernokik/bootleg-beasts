@@ -1,8 +1,8 @@
-"""Numba kernels: win evaluation, Static reveals, Override Wild crosses, base spins, the level-up
-bonus, and batch simulators.
+"""Numba kernels: win evaluation, Static reveals, Net Wilds, base spins, the level-up bonus with its
+Catch Multiplier, and batch simulators.
 
-Grids are indexed [reel, row]. A wild mask marks cells that are wild because an Override Wild cross
-covers them (this spin, or locked from earlier in the bonus).
+Grids are indexed [reel, row]. A wild mask marks cells that are wild because a Net Wild covers them
+(base game: its row and column; bonus: its reel, this spin or held from an earlier spin).
 
 Each batch simulator splits the work into chunks and seeds every chunk with seed + chunk index, so
 results are reproducible no matter how many threads run them.
@@ -11,7 +11,8 @@ results are reproducible no matter how many threads run them.
 import numpy as np
 from numba import njit, prange
 
-from .config import BASE_WILD_MULTS, CORE, N_PAYING, OVERRIDE_REELS, REACTOR, REELS, ROWS, STATIC, WILD
+from .config import (BASE_WILD_MULTS, CORE, HOLD_FOREVER, N_BEASTS, N_PAYING, OVERRIDE_REELS, REACTOR, REELS,
+                     ROWS, STATIC, WILD)
 
 OW_FIRST = OVERRIDE_REELS[0]
 OW_LAST = OVERRIDE_REELS[-1]
@@ -32,7 +33,7 @@ def spin_reels(strips, lens, grid):
 
 @njit(cache=True)
 def add_cross(mask, reel, row):
-    """Override Wild at (reel, row): its whole column and whole row turn wild."""
+    """Net Wild at (reel, row): its whole column and whole row turn wild."""
     for k in range(ROWS):
         mask[reel, k] = True
     for r in range(REELS):
@@ -72,8 +73,8 @@ def ways_win(grid, wild_mask, paytable, cnt):
 
 @njit(cache=True)
 def ways_win_base(grid, wild_mask, paytable, cnt):
-    """Base-game ways win: like ways_win, but each Glitch Wild that landed (not one revealed by
-    Static, and not covered by an Override) draws a multiplier and counts as that many ways, so
+    """Base-game ways win: like ways_win, but each Tag Wild that landed (not one revealed by
+    Static, and not covered by a Net) draws a multiplier and counts as that many ways, so
     multipliers on one win multiply together. Revealed wilds (REVEALED_WILD) count once."""
     for r in range(REELS):
         for s in range(N_PAYING + 1):
@@ -114,8 +115,9 @@ def draw_count(cum_weights):
 
 
 @njit(cache=True)
-def reveal_static(grid, blocked, rv_syms, rv_cum):
-    """Every visible Static (not under a blocked cell) turns into the same random symbol.
+def reveal_static(grid, blocked, rv_syms, rv_cum, use_blocked=True):
+    """Every visible Static (not under a blocked cell, if `use_blocked`) turns into the same random
+    symbol.
 
     The symbol is drawn on every spin, independent of the reel stops. Returns the revealed symbol,
     or -1 if no Static was showing."""
@@ -123,7 +125,7 @@ def reveal_static(grid, blocked, rv_syms, rv_cum):
     found = False
     for r in range(REELS):
         for k in range(ROWS):
-            if not blocked[r, k] and grid[r, k] == STATIC:
+            if (not use_blocked or not blocked[r, k]) and grid[r, k] == STATIC:
                 grid[r, k] = m
                 found = True
     return m if found else -1
@@ -139,7 +141,7 @@ def _reel_used(out_r, placed, r):
 
 @njit(cache=True)
 def place_overrides(n, blocked, out_r, out_k):
-    """Drop up to n Override Wilds on reels 2-4, each on a different reel, never on a blocked cell.
+    """Drop up to n Net Wilds on reels 2-4, each on a different reel, never on a blocked cell.
 
     Each drop picks uniformly among the allowed cells. Returns how many were placed."""
     placed = 0
@@ -173,20 +175,34 @@ def place_overrides(n, blocked, out_r, out_k):
 
 
 @njit(cache=True)
-def add_shape(mask, reel, row, shape):
-    """Shape 1: the Override Wild's column turns wild. Shape 2: its whole row and column."""
-    if shape == 2:
-        add_cross(mask, reel, row)
-    else:
-        for k in range(ROWS):
-            mask[reel, k] = True
+def place_nets(n, out_r, out_k):
+    """Bonus: drop up to n Net Wilds on reels 2-4, each on a different reel, netted or not. Each
+    drop picks uniformly among the cells of the reels not used yet (the row is only where it lands)."""
+    placed = 0
+    for _ in range(min(n, OW_LAST - OW_FIRST + 1)):
+        m = 0
+        for r in range(OW_FIRST, OW_LAST + 1):
+            if not _reel_used(out_r, placed, r):
+                m += 1
+        pick = np.random.randint(0, m * ROWS)
+        reel_pick = pick // ROWS
+        for r in range(OW_FIRST, OW_LAST + 1):
+            if _reel_used(out_r, placed, r):
+                continue
+            if reel_pick == 0:
+                out_r[placed] = r
+                out_k[placed] = pick % ROWS
+                break
+            reel_pick -= 1
+        placed += 1
+    return placed
 
 
 @njit(cache=True)
 def base_spin(strips, lens, paytable, ow_cum, rv_syms, rv_cum, grid, mask, blocked, cnt, ow_r, ow_k):
-    """One base-game spin. Returns (ways win, Capture Cores, Override Wilds dropped, revealed symbol).
+    """One base-game spin. Returns (ways win, Capture Cores, Net Wilds dropped, revealed symbol).
 
-    Order: reels stop, Cores are counted, Static reveals, then any Override Wild expands."""
+    Order: reels stop, Cores are counted, Static reveals, then any Net Wild expands."""
     spin_reels(strips, lens, grid)
     cores = 0
     for r in range(REELS):
@@ -214,78 +230,78 @@ def base_spin(strips, lens, paytable, ow_cum, rv_syms, rv_cum, grid, mask, block
 
 @njit(cache=True)
 def bonus_round(
-    strips, lens, paytable, level_cum, rv_syms, rv_cum, mults, shapes, cap_v, cap_c, sticky_w, sticky_x, start_level,
-    free_spins, per_level, levelup_spins, guarantee, min_win, cap, grid, mask, sticky, cnt, ow_r, ow_k,
+    strips, lens, paytable, level_cum, rv_syms, rv_cum, catch, hold, doubles, start_level, free_spins, per_level,
+    levelup_spins, min_win, cap, grid, mask, timer, cnt, ow_r, ow_k,
 ):
-    """Play one bonus. Returns (win, spins played, Override Wilds, final level, Reactors, hit cap).
+    """Play one bonus. Returns (win, spins played, Nets dropped, final level, Cores collected,
+    beasts caught, final Catch Multiplier, hit cap).
 
-    Each spin: reels stop; Reactors not under locked cells are counted; Static reveals; an Override
-    Wild may drop (chance set by the level) and turns its column (shape 1) or row and column
-    (shape 2) wild; with `guarantee`, one is forced on a random spin among the first `free_spins`
-    if none has dropped by then; the win pays x the level's multiplier.
-    Then Glitch Wilds lock if the level says so, and every `per_level` Reactors collected raise the
-    level by one (up to the top level) and add `levelup_spins` spins. Locked cells hide whatever
-    lands under them. The bonus stops as soon as its total reaches `cap`.
+    Each spin: reels stop; bonus Capture Cores are counted; Static reveals; reels still held by an
+    earlier Net are wild; a Net Wild may drop (chance set by the level) onto reels 2-4, any reel,
+    netted or not. Its whole reel turns wild and every beast on that reel is caught: each adds the
+    level's catch value to the Catch Multiplier (starts at x1, never resets). The reel then stays
+    wild for the level's hold (extra spins). The spin pays its ways win x the Catch Multiplier.
+    After the win, holds count down, and every `per_level` Cores raise the level by one (up to the
+    top level) and add `levelup_spins` spins; a level that `doubles` doubles the multiplier and
+    makes every held reel hold for good. The bonus stops as soon as its total reaches `cap`.
     """
     for r in range(REELS):
-        for k in range(ROWS):
-            sticky[r, k] = False
+        timer[r] = 0
     level = start_level
     spins_left = free_spins
     meter = 0
     reactors = 0
+    caught = 0
+    mult = 1
     total = 0.0
     n_drop = 0
     played = 0
-    g_spin = 1 + np.random.randint(0, free_spins) if guarantee else -1
     while spins_left > 0:
         spins_left -= 1
         played += 1
         spin_reels(strips, lens, grid)
         r_count = 0
         for r in range(REELS):
+            held = timer[r] > 0
             for k in range(ROWS):
-                mask[r, k] = sticky[r, k]
-                if not sticky[r, k] and grid[r, k] == REACTOR:
+                mask[r, k] = held
+                if grid[r, k] == REACTOR:
                     r_count += 1
-        reveal_static(grid, sticky, rv_syms, rv_cum)
-        n_new = 0
-        spin_mult = 1
+        reveal_static(grid, mask, rv_syms, rv_cum, False)
         n = draw_count(level_cum[level])
-        if guarantee and n == 0 and n_drop == 0 and played == g_spin:
-            n = 1
         if n > 0:
-            n_new = place_overrides(n, sticky, ow_r, ow_k)
+            n_new = place_nets(n, ow_r, ow_k)
             for i in range(n_new):
-                # capture: beasts under this Override's shape (not already locked) add multiplier
-                for r in range(REELS):
-                    for k in range(ROWS):
-                        hit = r == ow_r[i] or (shapes[level] == 2 and k == ow_k[i])
-                        if hit and not mask[r, k] and grid[r, k] < 4:
-                            spin_mult += cap_v[level, draw_count(cap_c[level])]
-                            mask[r, k] = True
-                add_shape(mask, ow_r[i], ow_k[i], shapes[level])
-            if sticky_x[level]:  # the Override's column locks (on Overload the row is one spin only)
-                for i in range(n_new):
-                    add_shape(sticky, ow_r[i], ow_k[i], 1)
-        n_drop += n_new
-        total += ways_win(grid, mask, paytable, cnt) * mults[level] * spin_mult
-        if total >= cap:
-            return cap, played, n_drop, level, reactors + r_count, True
-        if sticky_w[level]:
-            for r in range(REELS):
+                rr = ow_r[i]
                 for k in range(ROWS):
-                    if grid[r, k] == WILD:
-                        sticky[r, k] = True
+                    if grid[rr, k] < N_BEASTS:
+                        mult += catch[level]
+                        caught += 1
+                    mask[rr, k] = True
+                t = HOLD_FOREVER if hold[level] >= HOLD_FOREVER else hold[level] + 1
+                if t > timer[rr]:
+                    timer[rr] = t
+            n_drop += n_new
+        total += ways_win(grid, mask, paytable, cnt) * mult
+        if total >= cap:
+            return cap, played, n_drop, level, reactors + r_count, caught, mult, True
+        for r in range(REELS):
+            if 0 < timer[r] < HOLD_FOREVER:
+                timer[r] -= 1
         reactors += r_count
         meter += r_count
         while meter >= per_level and level < N_LEVELS - 1:
             meter -= per_level
             level += 1
             spins_left += levelup_spins
+            if doubles[level]:
+                mult *= 2
+                for r in range(REELS):
+                    if timer[r] > 0:
+                        timer[r] = HOLD_FOREVER
     if total < min_win:
         total = min(min_win, cap)
-    return total, played, n_drop, level, reactors, False
+    return total, played, n_drop, level, reactors, caught, mult, False
 
 
 @njit(cache=True)
@@ -299,12 +315,12 @@ def bucket(win, edges):
 @njit(cache=True)
 def game_round(
     base_strips, base_lens, bonus_strips, bonus_lens, paytable, base_cum, rv_base_s, rv_base_c,
-    rv_bonus_s, rv_bonus_c, level_cum, mults, shapes, cap_v, cap_c, sticky_w, sticky_x, start_by_cores, free_spins,
-    per_level, levelup_spins, min_wins, max_win, grid, mask, blocked, sticky, cnt, ow_r, ow_k,
+    rv_bonus_s, rv_bonus_c, level_cum, catch, hold, doubles, start_by_cores, free_spins, per_level, levelup_spins,
+    min_wins, max_win, grid, mask, blocked, timer, cnt, ow_r, ow_k,
 ):
     """One full round: a base spin plus any bonus it triggers.
 
-    Returns (total, base win, Override dropped, revealed symbol, start level or -1, final level,
+    Returns (total, base win, Net dropped, revealed symbol, start level or -1, final level,
     bonus win, hit max win)."""
     win, cores, n_ow, rev = base_spin(
         base_strips, base_lens, paytable, base_cum, rv_base_s, rv_base_c, grid, mask, blocked, cnt,
@@ -316,10 +332,9 @@ def game_round(
     final = -1
     bw = 0.0
     if start >= 0:
-        bw, _, _, final, _, _ = bonus_round(
-            bonus_strips, bonus_lens, paytable, level_cum, rv_bonus_s, rv_bonus_c, mults, shapes, cap_v, cap_c, sticky_w,
-            sticky_x, start, free_spins, per_level, levelup_spins, False, min_wins[start], max_win - win, grid, mask,
-            sticky, cnt, ow_r, ow_k,
+        bw, _, _, final, _, _, _, _ = bonus_round(
+            bonus_strips, bonus_lens, paytable, level_cum, rv_bonus_s, rv_bonus_c, catch, hold, doubles, start,
+            free_spins, per_level, levelup_spins, min_wins[start], max_win - win, grid, mask, timer, cnt, ow_r, ow_k,
         )
     total = win + bw
     capped = total >= max_win
@@ -331,7 +346,7 @@ def game_round(
 @njit(parallel=True, cache=True)
 def simulate_game(
     n_chunks, chunk_size, seed, base_strips, base_lens, bonus_strips, bonus_lens, paytable,
-    base_cum, rv_base_s, rv_base_c, rv_bonus_s, rv_bonus_c, level_cum, mults, shapes, cap_v, cap_c, sticky_w, sticky_x,
+    base_cum, rv_base_s, rv_base_c, rv_bonus_s, rv_bonus_c, level_cum, catch, hold, doubles,
     start_by_cores, free_spins, per_level, levelup_spins, min_wins, max_win, edges,
 ):
     """Play n_chunks * chunk_size full game rounds."""
@@ -355,16 +370,16 @@ def simulate_game(
         grid = np.empty((REELS, ROWS), np.int8)
         mask = np.zeros((REELS, ROWS), np.bool_)
         blocked = np.zeros((REELS, ROWS), np.bool_)
-        sticky = np.zeros((REELS, ROWS), np.bool_)
+        timer = np.zeros(REELS, np.int64)
         cnt = np.zeros((REELS, N_PAYING + 1), np.int64)
         ow_r = np.zeros(3, np.int64)
         ow_k = np.zeros(3, np.int64)
         for _ in range(chunk_size):
             total, win, n_ow, rev, start, final, bw, capped = game_round(
                 base_strips, base_lens, bonus_strips, bonus_lens, paytable, base_cum, rv_base_s,
-                rv_base_c, rv_bonus_s, rv_bonus_c, level_cum, mults, shapes, cap_v, cap_c, sticky_w, sticky_x,
+                rv_base_c, rv_bonus_s, rv_bonus_c, level_cum, catch, hold, doubles,
                 start_by_cores, free_spins, per_level, levelup_spins, min_wins, max_win, grid, mask, blocked,
-                sticky, cnt, ow_r, ow_k,
+                timer, cnt, ow_r, ow_k,
             )
             base_part[c] += win
             if n_ow > 0:
@@ -392,8 +407,8 @@ def simulate_game(
 
 @njit(parallel=True, cache=True)
 def simulate_bonus(
-    n_chunks, chunk_size, seed, strips, lens, paytable, level_cum, rv_s, rv_c, mults, shapes, cap_v, cap_c, sticky_w,
-    sticky_x, start_level, free_spins, per_level, levelup_spins, min_wins, max_win, edges,
+    n_chunks, chunk_size, seed, strips, lens, paytable, level_cum, rv_s, rv_c, catch, hold, doubles,
+    start_level, free_spins, per_level, levelup_spins, min_wins, max_win, edges,
 ):
     """Play n_chunks * chunk_size bonuses directly from `start_level` (what a bonus buy plays)."""
     nb = edges.shape[0] + 1
@@ -402,6 +417,8 @@ def simulate_bonus(
     spins = np.zeros(n_chunks, np.int64)
     drops = np.zeros(n_chunks, np.int64)
     reactors = np.zeros(n_chunks, np.int64)
+    catches = np.zeros(n_chunks, np.int64)
+    mults = np.zeros(n_chunks)
     reach = np.zeros((n_chunks, N_LEVELS), np.int64)
     reach_win = np.zeros((n_chunks, N_LEVELS))
     maxw = np.zeros(n_chunks, np.int64)
@@ -411,21 +428,22 @@ def simulate_bonus(
         np.random.seed(seed + c)
         grid = np.empty((REELS, ROWS), np.int8)
         mask = np.zeros((REELS, ROWS), np.bool_)
-        sticky = np.zeros((REELS, ROWS), np.bool_)
+        timer = np.zeros(REELS, np.int64)
         cnt = np.zeros((REELS, N_PAYING + 1), np.int64)
         ow_r = np.zeros(3, np.int64)
         ow_k = np.zeros(3, np.int64)
         for _ in range(chunk_size):
-            w, played, nd, final, nr, capped = bonus_round(
-                strips, lens, paytable, level_cum, rv_s, rv_c, mults, shapes, cap_v, cap_c, sticky_w, sticky_x,
-                start_level, free_spins, per_level, levelup_spins, False, min_wins[start_level], max_win, grid, mask,
-                sticky, cnt, ow_r, ow_k,
+            w, played, nd, final, nr, ncaught, mult, capped = bonus_round(
+                strips, lens, paytable, level_cum, rv_s, rv_c, catch, hold, doubles, start_level, free_spins,
+                per_level, levelup_spins, min_wins[start_level], max_win, grid, mask, timer, cnt, ow_r, ow_k,
             )
             tot[c] += w
             sq[c] += w * w
             spins[c] += played
             drops[c] += nd
             reactors[c] += nr
+            catches[c] += ncaught
+            mults[c] += mult
             reach[c, final] += 1
             reach_win[c, final] += w
             if capped:
@@ -433,13 +451,13 @@ def simulate_bonus(
             b = bucket(w, edges)
             hist[c, b] += 1
             hist_win[c, b] += w
-    return tot, sq, spins, drops, reactors, reach, reach_win, maxw, hist, hist_win
+    return tot, sq, spins, drops, reactors, catches, mults, reach, reach_win, maxw, hist, hist_win
 
 
 @njit(parallel=True, cache=True)
 def sample_bonus(
-    n_chunks, chunk_size, seed, strips, lens, paytable, level_cum, rv_s, rv_c, mults, shapes, cap_v, cap_c, sticky_w,
-    sticky_x, start_level, free_spins, per_level, levelup_spins, min_wins, max_win,
+    n_chunks, chunk_size, seed, strips, lens, paytable, level_cum, rv_s, rv_c, catch, hold, doubles,
+    start_level, free_spins, per_level, levelup_spins, min_wins, max_win,
 ):
     """Every bonus round's win and final level (for distributions)."""
     wins = np.zeros(n_chunks * chunk_size)
@@ -448,15 +466,14 @@ def sample_bonus(
         np.random.seed(seed + c)
         grid = np.empty((REELS, ROWS), np.int8)
         mask = np.zeros((REELS, ROWS), np.bool_)
-        sticky = np.zeros((REELS, ROWS), np.bool_)
+        timer = np.zeros(REELS, np.int64)
         cnt = np.zeros((REELS, N_PAYING + 1), np.int64)
         ow_r = np.zeros(3, np.int64)
         ow_k = np.zeros(3, np.int64)
         for i in range(chunk_size):
-            w, _, _, final, _, _ = bonus_round(
-                strips, lens, paytable, level_cum, rv_s, rv_c, mults, shapes, cap_v, cap_c, sticky_w, sticky_x,
-                start_level, free_spins, per_level, levelup_spins, False, min_wins[start_level], max_win, grid, mask,
-                sticky, cnt, ow_r, ow_k,
+            w, _, _, final, _, _, _, _ = bonus_round(
+                strips, lens, paytable, level_cum, rv_s, rv_c, catch, hold, doubles, start_level, free_spins,
+                per_level, levelup_spins, min_wins[start_level], max_win, grid, mask, timer, cnt, ow_r, ow_k,
             )
             wins[c * chunk_size + i] = w
             finals[c * chunk_size + i] = final
@@ -466,7 +483,7 @@ def sample_bonus(
 @njit(parallel=True, cache=True)
 def simulate_sessions(
     n_players, n_spins, n_paths, seed, base_strips, base_lens, bonus_strips, bonus_lens, paytable,
-    base_cum, rv_base_s, rv_base_c, rv_bonus_s, rv_bonus_c, level_cum, mults, shapes, cap_v, cap_c, sticky_w, sticky_x,
+    base_cum, rv_base_s, rv_base_c, rv_bonus_s, rv_bonus_c, level_cum, catch, hold, doubles,
     start_by_cores, free_spins, per_level, levelup_spins, min_wins, max_win,
 ):
     """Each player makes n_spins bets of 1. Returns every player's final net result and the running
@@ -478,7 +495,7 @@ def simulate_sessions(
         grid = np.empty((REELS, ROWS), np.int8)
         mask = np.zeros((REELS, ROWS), np.bool_)
         blocked = np.zeros((REELS, ROWS), np.bool_)
-        sticky = np.zeros((REELS, ROWS), np.bool_)
+        timer = np.zeros(REELS, np.int64)
         cnt = np.zeros((REELS, N_PAYING + 1), np.int64)
         ow_r = np.zeros(3, np.int64)
         ow_k = np.zeros(3, np.int64)
@@ -486,9 +503,9 @@ def simulate_sessions(
         for i in range(n_spins):
             total, _, _, _, _, _, _, _ = game_round(
                 base_strips, base_lens, bonus_strips, bonus_lens, paytable, base_cum, rv_base_s,
-                rv_base_c, rv_bonus_s, rv_bonus_c, level_cum, mults, shapes, cap_v, cap_c, sticky_w, sticky_x,
+                rv_base_c, rv_bonus_s, rv_bonus_c, level_cum, catch, hold, doubles,
                 start_by_cores, free_spins, per_level, levelup_spins, min_wins, max_win, grid, mask, blocked,
-                sticky, cnt, ow_r, ow_k,
+                timer, cnt, ow_r, ow_k,
             )
             bal += total - 1.0
             if p < n_paths:
