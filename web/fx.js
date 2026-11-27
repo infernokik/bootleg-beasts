@@ -1,5 +1,5 @@
-// Game-feel effects layered over the reels: pixel particle bursts, fountains, screen shake,
-// Override Wild beams and a full-screen glitch hit. All of them switch off for reduced motion.
+// Game-feel effects layered over the reels: confetti bursts, fountains, screen shake,
+// Override Wild beams and a full-screen impact flash. All of them switch off for reduced motion.
 
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -30,7 +30,7 @@ export class Fx {
     return [a.left - h.left + a.width / 2, a.top - h.top + a.height / 2];
   }
 
-  burst(x, y, { n = 24, colors = ["#21f0ff", "#ff2bd6", "#fff"], speed = 5, size = 4, life = 45,
+  burst(x, y, { n = 24, colors = ["#ffd21f", "#ff3b3b", "#fff"], speed = 5, size = 4, life = 45,
     gravity = 0.18, angle = 0, spread = Math.PI * 2 } = {}) {
     if (reduce) return;
     for (let i = 0; i < n; i++) {
@@ -46,7 +46,7 @@ export class Fx {
   }
 
   /** Coins and sparks shooting up from the bottom of the reels (big wins). */
-  fountain(n = 120, colors = ["#ffc531", "#fff1a8", "#b6ff3b", "#ff2bd6", "#21f0ff"]) {
+  fountain(n = 120, colors = ["#ffd21f", "#fff3d6", "#ff8a3d", "#ff3b3b", "#4a95ff"]) {
     if (reduce) return;
     const w = this.canvas.width / this.dpr;
     const h = this.canvas.height / this.dpr;
@@ -73,7 +73,17 @@ export class Fx {
         p.y += p.vy;
         ctx.globalAlpha = Math.max(0, 1 - p.age / p.life);
         ctx.fillStyle = p.c;
-        ctx.fillRect(Math.round(p.x * dpr), Math.round(p.y * dpr), p.s * dpr, p.s * dpr);
+        if (p.s >= 5) { // confetti: a spinning paper square
+          ctx.save();
+          ctx.translate(p.x * dpr, p.y * dpr);
+          ctx.rotate(p.age * 0.25 + p.s);
+          ctx.fillRect((-p.s * dpr) / 2, (-p.s * dpr * Math.abs(Math.cos(p.age * 0.2))) / 2, p.s * dpr, p.s * dpr * Math.abs(Math.cos(p.age * 0.2)) + 1);
+          ctx.restore();
+        } else {
+          ctx.beginPath();
+          ctx.arc(p.x * dpr, p.y * dpr, (p.s * dpr) / 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
       ctx.globalAlpha = 1;
       if (this.parts.length) requestAnimationFrame(step);
@@ -125,13 +135,14 @@ export function shake(el, strength = 7, ms = 380) {
   el.animate(frames, { duration: ms, easing: "linear" });
 }
 
-export function glitchHit(ms = 600) {
+/** Full-screen punch: a white flash and a zoom kick (bonus triggers and level-ups). */
+export function impact(ms = 600) {
   if (reduce) return Promise.resolve();
-  document.body.classList.remove("glitch-hit");
+  document.body.classList.remove("impact");
   void document.body.offsetWidth;
-  document.body.classList.add("glitch-hit");
+  document.body.classList.add("impact");
   return new Promise((r) => setTimeout(() => {
-    document.body.classList.remove("glitch-hit");
+    document.body.classList.remove("impact");
     r();
   }, ms));
 }

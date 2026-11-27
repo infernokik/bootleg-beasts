@@ -43,22 +43,27 @@ NAMES = [
 CODE_TO_ID = {code: i for i, code in enumerate(CODES)}
 
 # ---- Paytable: pay per way (x total bet), indexed [symbol, run length] -------
+# Pays are small because base-game Glitch Wilds carry x2-x5 multipliers that multiply ways.
 _PAYS = {
-    H1: (0.20, 0.50, 1.50),
-    H2: (0.15, 0.40, 1.00),
-    H3: (0.10, 0.30, 0.75),
-    H4: (0.10, 0.25, 0.50),
-    L1: (0.05, 0.10, 0.25),
-    L2: (0.05, 0.10, 0.25),
-    L3: (0.04, 0.10, 0.20),
-    L4: (0.04, 0.10, 0.20),
-    L5: (0.04, 0.10, 0.20),
+    H1: (0.10, 0.25, 0.70),
+    H2: (0.07, 0.18, 0.45),
+    H3: (0.05, 0.14, 0.35),
+    H4: (0.05, 0.12, 0.25),
+    L1: (0.02, 0.05, 0.12),
+    L2: (0.02, 0.05, 0.12),
+    L3: (0.02, 0.04, 0.10),
+    L4: (0.02, 0.04, 0.10),
+    L5: (0.02, 0.04, 0.10),
 }
 PAYTABLE = np.zeros((N_PAYING, REELS + 1), dtype=np.float64)
 for _sym, _pays in _PAYS.items():
     PAYTABLE[_sym, 3:] = _pays
 
-MAX_WIN = 5_000.0
+MAX_WIN = 10_000.0
+# Base game: every Glitch Wild that lands on the reels (not one revealed by Static) and isn't covered
+# by an Override carries a multiplier. In a ways game it counts as that many ways, so multipliers on one win multiply.
+BASE_WILD_MULTS = ((2, 3, 5), (6, 3, 1))  # (values, weights)
+BASE_WILD_MULT_MEAN = sum(v * w for v, w in zip(*BASE_WILD_MULTS)) / sum(BASE_WILD_MULTS[1])
 OVERRIDE_REELS = (1, 2, 3)  # 0-based, i.e. reels 2-4
 
 # Win-size buckets used by every report (x bet). A win w falls in bucket (edge[i-1], edge[i]].
@@ -118,6 +123,14 @@ BUYS = (
     Buy("night_raid", "Night Raid", 1),
     Buy("lockdown", "Lockdown", 2),
 )
+# Ante mode: the player pays ANTE_KEY's price (x bet) per spin to play the base game on the
+# "hunt" reels, which carry two Capture Cores per reel. Wins and the max win stay relative to the bet.
+ANTE_KEY = "hunt"
+ANTE_NAME = "Bonus Hunt"
+ANTE_PRICE = 3.0  # x bet per spin
+# Feature spin: a base spin with a guaranteed Override Wild cross, priced from the exact maths.
+FEATURE_KEY = "override_spin"
+FEATURE_NAME = "Override Spin"
 
 MODEL_PATH = Path(__file__).with_name("model.json")
 

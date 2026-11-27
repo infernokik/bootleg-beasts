@@ -64,6 +64,7 @@ export class Game {
       const lens = data.reelLengths[key];
       this.reelSets[key] = strips.map((strip, r) => strip.slice(0, lens[r]));
     }
+    this.wildMult = { values: data.wildMults.values, cum: cumulative(data.wildMults.weights) };
     this.cum = {};
     for (const [key, w] of Object.entries(data.overrideWeights)) this.cum[key] = cumulative(w);
     this.reveal = {};
@@ -127,7 +128,9 @@ export class Game {
   }
 
   // Ways win (x bet). With detail, also return each paying symbol's run and the cells it uses.
-  waysWin(grid, mask, detail = false) {
+  /** Ways win. `wmult` (base game only) gives each Glitch Wild not covered by an Override its
+   *  multiplier: it counts as that many ways, so multipliers on one win multiply together. */
+  waysWin(grid, mask, detail = false, wmult = null) {
     const R = this.R;
     const K = this.K;
     const cnt = [];
@@ -136,7 +139,8 @@ export class Game {
       const c = new Array(N_PAYING).fill(0);
       for (let k = 0; k < K; k++) {
         const v = grid[r][k];
-        if (mask[r][k] || v === WILD) wild[r]++;
+        if (mask[r][k]) wild[r]++;
+        else if (v === WILD) wild[r] += wmult ? wmult[r][k] : 1;
         else if (v < N_PAYING) c[v]++;
       }
       cnt.push(c);
@@ -169,20 +173,28 @@ export class Game {
   }
 
   /** One base-game spin: reels stop, Cores are counted, Static reveals, then any Override expands. */
-  baseSpin() {
-    const { grid, stops } = this.spinReels("base");
+  baseSpin({ mode = "base", forceOverride = false } = {}) {
+    const { grid, stops } = this.spinReels(mode);
     const landed = grid.map((c) => c.slice());
     let cores = 0;
     for (const col of grid) for (const v of col) if (v === CORE) cores++;
     const reveal = this.revealStatic(grid, null, "base");
     const mask = emptyMask(this.R, this.K);
-    const n = this.draw(this.cum.base);
+    const n = forceOverride ? 1 : this.draw(this.cum[mode] ?? this.cum.base);
     const drops = n > 0 ? this.placeOverrides(n, emptyMask(this.R, this.K)) : [];
     for (const [r, k] of drops) addCross(mask, r, k);
-    const { total, lines } = this.waysWin(grid, mask, true);
+    const wmult = grid.map((col) => col.map(() => 1));
+    const wildMults = [];
+    for (let r = 0; r < this.R; r++)
+      for (let k = 0; k < this.K; k++)
+        if (!mask[r][k] && grid[r][k] === WILD && landed[r][k] === WILD) { // revealed wilds carry no multiplier
+          wmult[r][k] = this.wildMult.values[this.draw(this.wildMult.cum)];
+          wildMults.push([r, k, wmult[r][k]]);
+        }
+    const { total, lines } = this.waysWin(grid, mask, true, wmult);
     const win = Math.min(total, this.maxWin);
     const startLevel = this.data.startLevel[Math.min(cores, 5)] ?? -1;
-    return { grid, landed, stops, mask, drops, reveal, cores, win, lines, startLevel };
+    return { grid, landed, stops, mask, drops, reveal, cores, win, lines, startLevel, wildMults };
   }
 
   startBonus(startLevel, cap = this.maxWin) {

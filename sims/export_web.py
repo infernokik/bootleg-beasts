@@ -16,6 +16,12 @@ import numpy as np
 
 from bootleg_beasts import engine
 from bootleg_beasts.config import (
+    ANTE_KEY,
+    ANTE_NAME,
+    ANTE_PRICE,
+    BASE_WILD_MULTS,
+    FEATURE_KEY,
+    FEATURE_NAME,
     BUYS,
     CAPTURE,
     CODES,
@@ -48,6 +54,7 @@ def stats() -> dict:
         "rtp": r["rtp_from_parts"]["rtp"],
         "rtpCi95": r["rtp_from_parts"]["ci95"],
         "baseRtp": r["exact"]["rtp_base_ways"],
+        "overrideSpinWays": r["exact"]["mean_win_one_override"],
         "simSpins": r["game"]["spins"],
         "hitRate": r["game"]["hit_rate"],
         "std": r["game"]["std"],
@@ -56,6 +63,10 @@ def stats() -> dict:
         "bonusMean": [r["bonus"][lv.key]["mean_win"] for lv in LEVELS[:3]],
         "levelReach": [r["bonus"][lv.key]["final_level_share"] for lv in LEVELS[:3]],
         "buyRtp": {k: v["rtp"] for k, v in r["buys"].items()},
+        "buyProfile": {k: v["profile"] for k, v in r["buys"].items()},
+        "ante": r.get("ante", {}),
+        "featureSpin": r.get("feature_spin", {}),
+        "sessionsAhead": r["sessions"]["p_ahead"],
     }
 
 
@@ -108,6 +119,9 @@ def main() -> None:
         ],
         "buys": [{"key": b.key, "name": b.name, "startLevel": b.start_level, "price": model.buy_prices[b.key]}
                  for b in BUYS],
+        "ante": {"key": ANTE_KEY, "name": ANTE_NAME, "price": ANTE_PRICE, "reelSet": ANTE_KEY},
+        "featureSpin": {"key": FEATURE_KEY, "name": FEATURE_NAME, "price": model.buy_prices[FEATURE_KEY]},
+        "wildMults": {"values": list(BASE_WILD_MULTS[0]), "weights": list(BASE_WILD_MULTS[1])},
         "revealWeights": model.reveal_weights,
         "reelSets": {k: rs.strips[:, : int(rs.lens.max())].tolist() for k, rs in model.reels.items()},
         "reelLengths": {k: rs.lens.tolist() for k, rs in model.reels.items()},

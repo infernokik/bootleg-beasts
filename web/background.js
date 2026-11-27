@@ -1,9 +1,6 @@
-// Animated pixel-art city behind the game: a synthwave sun, three skyline layers with lit windows,
-// flickering neon signs, hover cars and rain. Drawn at low resolution, scaled up with crisp pixels.
-
-const PX = 3; // screen pixels per art pixel
-const WINDOW_COLOURS = ["#ffd86b", "#21f0ff", "#ff5ce1", "#b197fc", "#ffe9b0"];
-const SIGN_COLOURS = ["#ff2bd6", "#21f0ff", "#ffc531", "#b6ff3b"];
+// The back alley behind the game: a grimy brick wall with faded posters and graffiti, a pavement
+// strip, one warm street lamp overhead and dust drifting through its light. The wall is drawn once
+// per resize; only the light flicker and the dust animate.
 
 function rng(seed) {
   let s = seed >>> 0;
@@ -13,170 +10,180 @@ function rng(seed) {
 export function startBackground(canvas) {
   const ctx = canvas.getContext("2d");
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  let W, H, base, flickers, signs, drops, cars;
+  let W, H, dpr, wall, dust;
 
   function build() {
-    W = Math.max(64, Math.ceil((innerWidth || document.documentElement.clientWidth || 1280) / PX));
-    H = Math.max(48, Math.ceil((innerHeight || document.documentElement.clientHeight || 720) / PX));
+    dpr = Math.min(2, devicePixelRatio || 1);
+    W = Math.ceil((innerWidth || 1280) * dpr);
+    H = Math.ceil((innerHeight || 720) * dpr);
     canvas.width = W;
     canvas.height = H;
-    const rand = rng(1337);
-    base = document.createElement("canvas");
-    base.width = W;
-    base.height = H;
-    const o = base.getContext("2d");
+    const rand = rng(2024);
+    wall = document.createElement("canvas");
+    wall.width = W;
+    wall.height = H;
+    const o = wall.getContext("2d");
 
-    // Sky: banded gradient with dithered seams
-    const bands = ["#08041a", "#0d0626", "#140832", "#1d0a3c", "#290c45", "#360d4a", "#43104c"];
-    const bandH = Math.ceil((H * 0.78) / bands.length);
-    bands.forEach((c, i) => {
-      o.fillStyle = c;
-      o.fillRect(0, i * bandH, W, bandH + 1);
-      if (i > 0) {
-        o.fillStyle = bands[i - 1];
-        for (let x = 0; x < W; x += 2) o.fillRect(x + (i % 2), i * bandH, 1, 1);
+    // Mortar, then bricks with a little colour variation, a top highlight and a bottom shadow
+    o.fillStyle = "#141017";
+    o.fillRect(0, 0, W, H);
+    const bw = 70 * dpr, bh = 26 * dpr, gap = 4 * dpr;
+    const floorY = H * 0.86;
+    for (let row = 0, y = 0; y < floorY; row++, y += bh) {
+      for (let x = row % 2 ? -bw / 2 : 0; x < W; x += bw) {
+        const l = 13 + rand() * 6;
+        const h = 268 + rand() * 18;
+        o.fillStyle = `hsl(${h} ${10 + rand() * 8}% ${l}%)`;
+        o.fillRect(x + gap / 2, y + gap / 2, bw - gap, bh - gap);
+        o.fillStyle = "rgba(255,255,255,.035)";
+        o.fillRect(x + gap / 2, y + gap / 2, bw - gap, 2 * dpr);
+        o.fillStyle = "rgba(0,0,0,.25)";
+        o.fillRect(x + gap / 2, y + bh - gap / 2 - 3 * dpr, bw - gap, 3 * dpr);
+        if (rand() < 0.07) { // chipped brick
+          o.fillStyle = "rgba(0,0,0,.35)";
+          o.beginPath();
+          o.arc(x + rand() * bw, y + rand() * bh, (4 + rand() * 6) * dpr, 0, Math.PI * 2);
+          o.fill();
+        }
       }
-    });
-    o.fillStyle = bands[bands.length - 1];
-    o.fillRect(0, bands.length * bandH, W, H);
-
-    // Stars
-    for (let i = 0; i < (W * H) / 900; i++) {
-      o.fillStyle = rand() < 0.8 ? "rgba(255,255,255,.35)" : "rgba(33,240,255,.6)";
-      o.fillRect(Math.floor(rand() * W), Math.floor(rand() * H * 0.45), 1, 1);
     }
 
-    // Synthwave sun with scanline gaps
-    const sx = Math.floor(W * 0.68), sy = Math.floor(H * 0.5), sr = Math.floor(Math.min(W, H) * 0.2);
-    for (let y = -sr; y <= sr; y++) {
-      const half = Math.floor(Math.sqrt(sr * sr - y * y));
-      const t = (y + sr) / (2 * sr);
-      if (y > 0 && (y % 6) < Math.min(4, 1 + Math.floor(t * 5))) continue;
-      o.fillStyle = t < 0.5 ? "#ff7ad9" : t < 0.75 ? "#ff4fa8" : "#ff8a3d";
-      o.globalAlpha = 0.55;
-      o.fillRect(sx - half, sy + y, half * 2, 1);
+    // Wheat-pasted posters, peeling and faded
+    const posterCols = ["#fff3d6", "#ffd21f", "#ff3b3b", "#4a95ff"];
+    for (let i = 0; i < 7; i++) {
+      const pw = (90 + rand() * 120) * dpr, ph = pw * (1.2 + rand() * 0.4);
+      const px = rand() * W, py = rand() * floorY * 0.8;
+      o.save();
+      o.translate(px, py);
+      o.rotate((rand() - 0.5) * 0.25);
+      o.globalAlpha = 0.06 + rand() * 0.05;
+      o.fillStyle = posterCols[i % posterCols.length];
+      o.beginPath();
+      o.moveTo(0, 0);
+      for (let t = 0; t <= 1; t += 0.1) o.lineTo(pw * t, (rand() - 0.5) * 8 * dpr);
+      o.lineTo(pw, ph);
+      for (let t = 1; t >= 0; t -= 0.1) o.lineTo(pw * t, ph + (rand() - 0.5) * 14 * dpr);
+      o.closePath();
+      o.fill();
+      o.globalAlpha *= 1.6;
+      o.fillStyle = "#141017";
+      o.fillRect(pw * 0.12, ph * 0.14, pw * 0.76, ph * 0.08);
+      o.beginPath();
+      o.arc(pw / 2, ph * 0.55, pw * 0.26, 0, Math.PI * 2);
+      o.fill();
+      o.restore();
+    }
+
+    // Faded spray tags with drips
+    const tagCols = ["#ff3b3b", "#ffd21f", "#4a95ff", "#4cc43a", "#ff6fae"];
+    o.lineCap = "round";
+    o.lineJoin = "round";
+    for (let i = 0; i < 9; i++) {
+      const tx = rand() * W, ty = (0.15 + rand() * 0.7) * floorY, s = (40 + rand() * 60) * dpr;
+      o.strokeStyle = tagCols[i % tagCols.length];
+      o.globalAlpha = 0.08 + rand() * 0.06;
+      o.lineWidth = (5 + rand() * 6) * dpr;
+      o.beginPath();
+      o.moveTo(tx, ty);
+      let cx = tx, cy = ty;
+      for (let k = 0; k < 5; k++) {
+        const nx = cx + s * (0.3 + rand() * 0.5), ny = ty + (rand() - 0.5) * s * 0.9;
+        o.bezierCurveTo(cx + s * 0.2, cy - s * 0.6, nx - s * 0.2, ny + s * 0.6, nx, ny);
+        cx = nx;
+        cy = ny;
+      }
+      o.stroke();
+      o.lineWidth = 3 * dpr;
+      for (let k = 0; k < 4; k++) {
+        const dx = tx + rand() * (cx - tx), dy = ty + s * 0.3;
+        o.beginPath();
+        o.moveTo(dx, dy);
+        o.lineTo(dx, dy + (10 + rand() * 40) * dpr);
+        o.stroke();
+      }
     }
     o.globalAlpha = 1;
 
-    // Skyline layers, far to near
-    flickers = [];
-    signs = [];
-    const layers = [
-      { base: 0.62, minH: 0.12, maxH: 0.34, minW: 6, maxW: 16, col: "#1a0d33", win: 0.1, wsz: 1 },
-      { base: 0.76, minH: 0.16, maxH: 0.42, minW: 9, maxW: 22, col: "#110822", win: 0.16, wsz: 1 },
-      { base: 0.92, minH: 0.2, maxH: 0.55, minW: 12, maxW: 30, col: "#07040f", win: 0.2, wsz: 2 },
-    ];
-    layers.forEach((L, li) => {
-      let x = -Math.floor(rand() * 10);
-      while (x < W) {
-        const bw = Math.floor(L.minW + rand() * (L.maxW - L.minW));
-        const bh = Math.floor(H * (L.minH + rand() * (L.maxH - L.minH)));
-        const top = Math.floor(H * L.base - bh);
-        o.fillStyle = L.col;
-        o.fillRect(x, top, bw, H - top);
-        if (rand() < 0.35) o.fillRect(x + Math.floor(bw / 2), top - 4 - Math.floor(rand() * 6), 1, 8); // antenna
-        // windows
-        for (let wy = top + 3; wy < H * L.base - 2; wy += L.wsz + 2) {
-          for (let wx = x + 2; wx < x + bw - 2; wx += L.wsz + 2) {
-            if (rand() < L.win) {
-              const c = WINDOW_COLOURS[Math.floor(rand() * WINDOW_COLOURS.length)];
-              o.fillStyle = c;
-              o.globalAlpha = 0.35 + 0.3 * li * 0.5 + rand() * 0.2;
-              o.fillRect(wx, wy, L.wsz, L.wsz);
-              if (rand() < 0.04) flickers.push({ x: wx, y: wy, s: L.wsz, c, on: true });
-            }
-          }
-        }
-        o.globalAlpha = 1;
-        // neon signs on the two nearer layers
-        if (li > 0 && rand() < 0.45 && bw > 10) {
-          const sw = 4 + Math.floor(rand() * Math.min(10, bw - 6)), sh = 2 + Math.floor(rand() * 2);
-          signs.push({
-            x: x + 2 + Math.floor(rand() * (bw - sw - 3)), y: top + 4 + Math.floor(rand() * Math.max(1, bh * 0.4)),
-            w: sw, h: sh, c: SIGN_COLOURS[Math.floor(rand() * SIGN_COLOURS.length)], on: true, next: 0,
-          });
-        }
-        x += bw + Math.floor(rand() * 3);
-      }
-    });
+    // Grime: soft dark stains
+    for (let i = 0; i < 26; i++) {
+      const gx = rand() * W, gy = rand() * H, gr = (60 + rand() * 220) * dpr;
+      const g = o.createRadialGradient(gx, gy, 0, gx, gy, gr);
+      g.addColorStop(0, "rgba(0,0,0,.28)");
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      o.fillStyle = g;
+      o.fillRect(gx - gr, gy - gr, gr * 2, gr * 2);
+    }
 
-    // Ground haze
-    const g = o.createLinearGradient(0, H * 0.75, 0, H);
-    g.addColorStop(0, "rgba(255,43,214,0)");
-    g.addColorStop(1, "rgba(255,43,214,.18)");
-    o.fillStyle = g;
-    o.fillRect(0, H * 0.75, W, H * 0.25);
+    // Pavement and kerb
+    const fg = o.createLinearGradient(0, floorY, 0, H);
+    fg.addColorStop(0, "#221c26");
+    fg.addColorStop(1, "#0d0a10");
+    o.fillStyle = fg;
+    o.fillRect(0, floorY, W, H - floorY);
+    o.fillStyle = "#2e2733";
+    o.fillRect(0, floorY, W, 6 * dpr);
+    o.fillStyle = "rgba(0,0,0,.5)";
+    o.fillRect(0, floorY + 6 * dpr, W, 3 * dpr);
 
-    drops = Array.from({ length: Math.floor((W * H) / 260) }, () => ({
-      x: rand() * W, y: rand() * H, v: 2 + rand() * 2.5, l: 2 + Math.floor(rand() * 3),
-    }));
-    cars = Array.from({ length: 3 }, (_, i) => ({
-      x: rand() * W, y: Math.floor(H * (0.3 + 0.12 * i)), v: (rand() < 0.5 ? -1 : 1) * (0.4 + rand() * 0.5),
-      c: i % 2 ? "#21f0ff" : "#ff2bd6",
+    // Vignette
+    const v = o.createRadialGradient(W / 2, H * 0.42, Math.min(W, H) * 0.25, W / 2, H * 0.5, Math.max(W, H) * 0.75);
+    v.addColorStop(0, "rgba(0,0,0,0)");
+    v.addColorStop(1, "rgba(0,0,0,.78)");
+    o.fillStyle = v;
+    o.fillRect(0, 0, W, H);
+
+    dust = Array.from({ length: still ? 0 : 46 }, () => ({
+      x: W * (0.2 + rand() * 0.6), y: rand() * H, r: (0.8 + rand() * 2.2) * dpr,
+      vx: (rand() - 0.5) * 0.25 * dpr, vy: (-0.1 - rand() * 0.25) * dpr, p: rand() * 6.28,
     }));
   }
 
-  function draw(now) {
-    ctx.drawImage(base, 0, 0);
-    for (const s of signs) {
-      if (now > s.next) {
-        s.on = Math.random() > 0.12;
-        s.next = now + (s.on ? 400 + Math.random() * 3000 : 60 + Math.random() * 120);
-      }
-      if (!s.on) continue;
-      ctx.globalAlpha = 0.25;
-      ctx.fillStyle = s.c;
-      ctx.fillRect(s.x - 1, s.y - 1, s.w + 2, s.h + 2);
-      ctx.globalAlpha = 0.95;
-      ctx.fillRect(s.x, s.y, s.w, s.h);
+  let flicker = 1, nextFlicker = 0;
+  function frame(t) {
+    ctx.drawImage(wall, 0, 0);
+    if (!still && t > nextFlicker) {
+      flicker = 0.55 + Math.random() * 0.3;
+      setTimeout(() => (flicker = 1), 60 + Math.random() * 90);
+      nextFlicker = t + 2500 + Math.random() * 7000;
     }
-    ctx.globalAlpha = 1;
-    for (const f of flickers) {
-      if (Math.random() < 0.01) f.on = !f.on;
-      if (!f.on) {
-        ctx.fillStyle = "#07040f";
-        ctx.fillRect(f.x, f.y, f.s, f.s);
-      }
+    // Street lamp light cone from above the board
+    const lx = W / 2, ly = -H * 0.08;
+    const g = ctx.createRadialGradient(lx, ly, 0, lx, ly, H * 1.05);
+    g.addColorStop(0, `rgba(255, 196, 110, ${0.3 * flicker})`);
+    g.addColorStop(0.45, `rgba(255, 170, 80, ${0.11 * flicker})`);
+    g.addColorStop(1, "rgba(255, 150, 60, 0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    for (const d of dust) {
+      d.x += d.vx + Math.sin(t / 1600 + d.p) * 0.15 * dpr;
+      d.y += d.vy;
+      if (d.y < -10) d.y = H + 10;
+      const a = 0.25 + 0.25 * Math.sin(t / 700 + d.p);
+      ctx.fillStyle = `rgba(255, 226, 170, ${a * flicker})`;
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+      ctx.fill();
     }
-    for (const c of cars) {
-      c.x += c.v;
-      if (c.x < -6) c.x = W + 6;
-      if (c.x > W + 6) c.x = -6;
-      ctx.fillStyle = c.c;
-      ctx.fillRect(Math.round(c.x), c.y, 3, 1);
-      ctx.globalAlpha = 0.3;
-      ctx.fillRect(Math.round(c.x) - 3 * Math.sign(c.v), c.y, 3, 1);
-      ctx.globalAlpha = 1;
-    }
-    ctx.fillStyle = "rgba(160,200,255,.32)";
-    for (const d of drops) {
-      d.y += d.v;
-      d.x -= d.v * 0.25;
-      if (d.y > H) {
-        d.y = -d.l;
-        d.x = Math.random() * (W + 20);
-      }
-      ctx.fillRect(Math.round(d.x), Math.round(d.y), 1, d.l);
-    }
-  }
-
-  let last = 0;
-  function loop(now) {
-    requestAnimationFrame(loop);
-    if (document.hidden || now - last < 33) return; // ~30 fps
-    last = now;
-    draw(now);
   }
 
   build();
-  draw(0);
-  let resizeTimer;
+  frame(0);
+  let resizeT;
   addEventListener("resize", () => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
+    clearTimeout(resizeT);
+    resizeT = setTimeout(() => {
       build();
-      draw(performance.now());
-    }, 150);
+      frame(performance.now());
+    }, 120);
   });
-  if (!still) requestAnimationFrame(loop);
+  if (still) return;
+  let last = 0;
+  const loop = (t) => {
+    if (!document.hidden && t - last > 33) { // ~30 fps is plenty for dust
+      frame(t);
+      last = t;
+    }
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
 }

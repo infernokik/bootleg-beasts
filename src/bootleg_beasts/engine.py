@@ -11,11 +11,14 @@ results are reproducible no matter how many threads run them.
 import numpy as np
 from numba import njit, prange
 
-from .config import CORE, N_PAYING, OVERRIDE_REELS, REACTOR, REELS, ROWS, STATIC, WILD
+from .config import BASE_WILD_MULTS, CORE, N_PAYING, OVERRIDE_REELS, REACTOR, REELS, ROWS, STATIC, WILD
 
 OW_FIRST = OVERRIDE_REELS[0]
 OW_LAST = OVERRIDE_REELS[-1]
 N_LEVELS = 4
+REVEALED_WILD = 14  # base game only: a Wild revealed by Static (no multiplier)
+WM_VALS = np.array(BASE_WILD_MULTS[0], dtype=np.int64)
+WM_CUM = np.cumsum(np.array(BASE_WILD_MULTS[1], dtype=np.int64))
 
 
 @njit(cache=True)
@@ -49,6 +52,39 @@ def ways_win(grid, wild_mask, paytable, cnt):
         for k in range(ROWS):
             v = grid[r, k]
             if wild_mask[r, k] or v == WILD:
+                cnt[r, N_PAYING] += 1
+            elif v < N_PAYING:
+                cnt[r, v] += 1
+    total = 0.0
+    for s in range(N_PAYING):
+        ways = 1
+        length = 0
+        for r in range(REELS):
+            c = cnt[r, s] + cnt[r, N_PAYING]
+            if c == 0:
+                break
+            ways *= c
+            length += 1
+        if length >= 3:
+            total += paytable[s, length] * ways
+    return total
+
+
+@njit(cache=True)
+def ways_win_base(grid, wild_mask, paytable, cnt):
+    """Base-game ways win: like ways_win, but each Glitch Wild that landed (not one revealed by
+    Static, and not covered by an Override) draws a multiplier and counts as that many ways, so
+    multipliers on one win multiply together. Revealed wilds (REVEALED_WILD) count once."""
+    for r in range(REELS):
+        for s in range(N_PAYING + 1):
+            cnt[r, s] = 0
+        for k in range(ROWS):
+            v = grid[r, k]
+            if wild_mask[r, k]:
+                cnt[r, N_PAYING] += 1
+            elif v == WILD:
+                cnt[r, N_PAYING] += WM_VALS[draw_count(WM_CUM)]
+            elif v == REVEALED_WILD:
                 cnt[r, N_PAYING] += 1
             elif v < N_PAYING:
                 cnt[r, v] += 1
@@ -159,14 +195,21 @@ def base_spin(strips, lens, paytable, ow_cum, rv_syms, rv_cum, grid, mask, block
             blocked[r, k] = False
             if grid[r, k] == CORE:
                 cores += 1
-    revealed = reveal_static(grid, blocked, rv_syms, rv_cum)
+    # Static reveal (same draw as reveal_static); a revealed Wild is marked so it carries no multiplier
+    m = rv_syms[draw_count(rv_cum)]
+    revealed = -1
+    for r in range(REELS):
+        for k in range(ROWS):
+            if grid[r, k] == STATIC:
+                grid[r, k] = REVEALED_WILD if m == WILD else m
+                revealed = m
     n_ow = 0
     n = draw_count(ow_cum)
     if n > 0:
         n_ow = place_overrides(n, blocked, ow_r, ow_k)
         for i in range(n_ow):
             add_cross(mask, ow_r[i], ow_k[i])
-    return ways_win(grid, mask, paytable, cnt), cores, n_ow, revealed
+    return ways_win_base(grid, mask, paytable, cnt), cores, n_ow, revealed
 
 
 @njit(cache=True)

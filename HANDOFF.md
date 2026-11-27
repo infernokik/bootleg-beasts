@@ -20,18 +20,24 @@ Building this as a resume project to get into the slot / iGaming industry. Likes
 style, pixel art, lots of features. Communicates casually; wants things done ("do whatever you think
 is best"). Keep all art original (no Pokémon or other IP; no adult content in public art).
 
-## State (v0.3 redesign: done and pushed)
+## State (v0.4 flagship + art revamp: done and pushed)
 
-- Base: 5x5, 3,125 ways. Static (X) is a mystery symbol (weights in model.json `reveal_weights`).
-  Override Wild cross ~1 in 1,534 base spins. 3/4/5 Capture Cores start the bonus at level 1/2/3. Max win 5,000x.
-- Bonus: 4 levels (config.py `LEVELS`). 3 Reactors = +4 spins and next level. Beast captures stack
-  onto the spin multiplier (config `CAPTURE`). Minimum win per start level (`MIN_BONUS_WIN`).
-- Buys (named after their start level): Street Hunt 100x, Night Raid 237x, Lockdown 723x. RTP 96.00% (verified, see docs/par_sheet.md).
-- Volatility is high (SD ~22x/spin) though the user asked for medium; user was told.
-- Pipeline after any math change: `sims	une.py` -> `simserify.py --spins 2e9` -> `sims\export_web.py`
-  -> `sims\charts.py` -> pytest -> open web/selftest.html -> bump `?v=` tags in web/index.html -> commit, push.
+- Base: 5x5, 3,125 ways. Static (X) mystery symbol. Glitch Wilds that land carry x2/x3/x5 in the base game
+  (Static-revealed ones count once: REVEALED_WILD in engine.py). Override Wild cross ~1 in 313 base spins.
+  3/4/5 Capture Cores start the bonus at level 1/2/3. Max win 10,000x.
+- Bonus: 4 levels (config.py `LEVELS`). 3 Reactors = +4 spins and next level. Beast captures stack.
+  Minimum win per start level (`MIN_BONUS_WIN`). Overload keeps column locks.
+- Buys: Override Spin 57.1x, Street Hunt 100x, Night Raid 289x, Lockdown 956x (Overload earned only).
+  Bonus Hunt ante 3x bet ("hunt" reel set, own Override rate). All modes verified at 96% (docs/par_sheet.md),
+  10^10-spin full-game z = -0.80.
+- Volatility very high (SD ~28x/spin); the user said keep it.
+- Art (v0.4): original hand-written SVG stickers in web/symbols.js (blob-URL <img>s), canvas back alley in
+  web/background.js, Lilita One + Rubik from Google Fonts. Old Gemini pixel art kept in art/ only.
+  The user disliked the neon/cyberpunk look and wants Hacksaw-level polish.
+- Pipeline after any math change: `sims\tune.py` -> `sims\verify.py --spins 1e10 --bonus-rounds 5e7` (~16 min)
+  -> `sims\export_web.py` -> `sims\charts.py` -> pytest -> web/selftest.html -> bump `?v=` tags -> commit, push.
 
 ## Ideas if the user wants more
 
-1. Lower volatility toward medium (flatter CAPTURE values, higher MIN_BONUS_WIN, retune).
-3. Ante bet; mobile layout polish.
+1. Jurisdiction switch (UK: no turbo/autoplay/buys), bonus replay, buy-card art showing 3/4/5 Cores.
+2. Animated character idles / custom win animations per beast; real music instead of synth loops.

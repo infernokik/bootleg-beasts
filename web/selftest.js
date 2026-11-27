@@ -2,7 +2,7 @@
 //   1. ways evaluation on 1,500 grids exported from Python (must match exactly)
 //   2. bonus rules on hand-built reels (same cases as tests/test_engine.py)
 //   3. Monte Carlo: base game, Street Hunt, Night Raid and Lockdown starts vs the verified Python numbers
-import { Game, setRandInt } from "./engine.js?v=11";
+import { Game, setRandInt } from "./engine.js?v=13";
 
 const out = document.getElementById("out");
 const results = { pass: 0, fail: 0 };
@@ -79,7 +79,8 @@ function mc(label, n, sample, expected) {
     `(z = ${z.toFixed(2)}, ${n.toLocaleString()} rounds, ${((performance.now() - t0) / 1000).toFixed(1)}s)`);
 }
 await new Promise((r) => setTimeout(r, 0));
-mc("Base game ways RTP", 4_000_000, () => game.baseSpin().win, s.baseRtp);
+mc("Base game ways RTP (with wild multipliers)", 4_000_000, () => game.baseSpin().win, s.baseRtp);
+mc("Override Spin ways win (guaranteed cross)", 300_000, () => game.baseSpin({ forceOverride: true }).win, s.overrideSpinWays);
 mc("Street Hunt (level 1 start) mean payout", 150_000, () => game.playBonus(0).total, s.bonusMean[0]);
 mc("Night Raid (level 2 start) mean payout", 100_000, () => game.playBonus(1).total, s.bonusMean[1]);
 mc("Lockdown (level 3 start) mean payout", 60_000, () => game.playBonus(2).total, s.bonusMean[2]);

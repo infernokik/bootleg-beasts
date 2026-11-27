@@ -4,9 +4,13 @@
 
 let ctx = null;
 let master = null;
-let muted = false;
+let muted = false; // master mute (the speaker button)
+let sfxOff = false; // settings: sound effects / music switched off individually
+let musicOff = false;
 try {
   muted = localStorage.getItem("bb.muted") === "true";
+  sfxOff = localStorage.getItem("bb.sfxOff") === "true";
+  musicOff = localStorage.getItem("bb.musicOff") === "true";
 } catch {
   /* private mode */
 }
@@ -60,7 +64,7 @@ function noise({ dur = 0.15, vol = 0.2, freq = 2000, q = 1, type = "bandpass", d
 
 const NOTES = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.66, 1318.51, 1567.98, 1760];
 const play = (fn) => (...args) => {
-  if (muted) return;
+  if (muted || sfxOff) return;
   try {
     fn(...args);
   } catch {
@@ -120,6 +124,19 @@ export const sfx = {
 };
 
 export const isMuted = () => muted;
+export const audioPrefs = () => ({ sound: !sfxOff, music: !musicOff });
+export function setAudioPrefs({ sound, music: m }) {
+  sfxOff = !sound;
+  musicOff = !m;
+  try {
+    localStorage.setItem("bb.sfxOff", String(sfxOff));
+    localStorage.setItem("bb.musicOff", String(musicOff));
+  } catch {
+    /* private mode */
+  }
+  if (musicOff) music.pause();
+  else music.resume();
+}
 export function setMuted(m) {
   muted = m;
   try {
@@ -134,8 +151,10 @@ export function setMuted(m) {
 
 // ---- Bonus music -------------------------------------------------------------------
 // A 4-bar chiptune loop in A minor, scheduled slightly ahead of time. Each level is faster and adds
-// a layer: kick + bass, then hats, then snare + arpeggio, then a lead line.
+// a layer: kick + bass, then hats, then snare + arpeggio, then a lead line. Level -1 is the calmer
+// base-game loop.
 const TEMPO = [116, 126, 138, 152];
+const BASE_TEMPO = 96;
 const ROOTS = [110, 87.31, 130.81, 98]; // A2 F2 C3 G2
 const LEAD = [4, 3, 2, 3, 4, 6, 4, 3]; // scale-ish multipliers of the root, two notes per bar
 const M = { on: false, level: 0, step: 0, next: 0, timer: null, gain: null };
@@ -151,6 +170,13 @@ function busGain() {
 
 function playStep(s, t, out) {
   const bar = s >> 4, i = s & 15, root = ROOTS[bar], L = M.level;
+  if (L < 0) {
+    if (i % 8 === 0) tone({ freq: 110, to: 45, type: "sine", dur: 0.16, vol: 0.32, at: t, out });
+    if (i % 4 === 2) tone({ freq: root, type: "triangle", dur: 0.22, vol: 0.14, at: t, out });
+    if (i % 4 === 0) tone({ freq: root * [3, 4, 4.76, 4][bar], type: "sine", dur: 0.3, vol: 0.035, at: t, out });
+    if (i % 4 === 3) noise({ dur: 0.02, vol: 0.025, freq: 9000, type: "highpass", at: t, out });
+    return;
+  }
   if (i % 4 === 0) tone({ freq: 130, to: 42, type: "sine", dur: 0.14, vol: 0.55, at: t, out });
   if (i % 2 === 0) tone({ freq: i % 4 === 2 ? root * 2 : root, type: "triangle", dur: 0.11, vol: 0.2, at: t, out });
   if (L >= 1 && i % 2 === 1) noise({ dur: 0.03, vol: 0.06, freq: 8000, type: "highpass", at: t, out });
@@ -169,7 +195,7 @@ function pump() {
   const out = busGain();
   while (M.next < a.currentTime + 0.15) {
     playStep(M.step, M.next, out);
-    M.next += 60 / TEMPO[M.level] / 4;
+    M.next += 60 / (M.level < 0 ? BASE_TEMPO : TEMPO[M.level]) / 4;
     M.step = (M.step + 1) % 64;
   }
 }
@@ -185,7 +211,7 @@ export const music = {
     M.level = Math.min(level, TEMPO.length - 1);
   },
   resume() {
-    if (!M.on || muted || M.timer) return;
+    if (!M.on || muted || musicOff || M.timer) return;
     try {
       const a = audio();
       busGain().gain.setValueAtTime(0.55, a.currentTime);

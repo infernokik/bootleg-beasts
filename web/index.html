@@ -2,98 +2,122 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#16121b">
   <title>Bootleg Beasts: free-play slot demo</title>
   <meta name="description" content="A free-play 5x5 cross-wild slot demo with a math model verified to 96% RTP by exact calculation and 10 billion simulated spins.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpolygon points='32,4 56,18 56,46 32,60 8,46 8,18' fill='%231b1404' stroke='%23ffc531' stroke-width='4'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%23ffc531'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="style.css?v=11">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpolygon points='60,32 46,56 18,56 4,32 18,8 46,8' fill='%23453e52' stroke='%231a1320' stroke-width='4'/%3E%3Ccircle cx='32' cy='32' r='15' fill='%23ffd21f' stroke='%231a1320' stroke-width='4'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Rubik:wght@500;700;800&display=swap">
+  <link rel="stylesheet" href="style.css?v=13">
 </head>
 <body data-repo="https://github.com/infernokik/bootleg-beasts">
   <canvas id="bg" aria-hidden="true"></canvas>
   <div id="mood" class="mood" aria-hidden="true"></div>
-  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-    <defs>
-      <!-- bootleg-toy packaging -->
-      <pattern id="dots" width="5" height="5" patternUnits="userSpaceOnUse"><circle cx="2.5" cy="2.5" r="1" fill="#000"/></pattern>
-      <radialGradient id="gBubble" cx=".32" cy=".25" r=".9"><stop offset="0" stop-color="#fff" stop-opacity=".38"/><stop offset=".6" stop-color="#fff" stop-opacity=".06"/><stop offset="1" stop-color="#fff" stop-opacity=".16"/></radialGradient>
-      <!-- creatures -->
-      <linearGradient id="gSpark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8ff6ff"/><stop offset="1" stop-color="#1b7fd0"/></linearGradient>
-      <linearGradient id="gBlaze" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff6a4d"/><stop offset="1" stop-color="#9c1248"/></linearGradient>
-      <linearGradient id="gFlame" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#ff3d00"/><stop offset=".6" stop-color="#ffb300"/><stop offset="1" stop-color="#fff59d"/></linearGradient>
-      <linearGradient id="gTide" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6ff8e2"/><stop offset="1" stop-color="#1a5fd6"/></linearGradient>
-      <linearGradient id="gThorn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c3f75e"/><stop offset="1" stop-color="#1f8a4c"/></linearGradient>
-      <!-- items -->
-      <linearGradient id="gDisc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e6ecff"/><stop offset=".35" stop-color="#b8f5ff"/><stop offset=".6" stop-color="#f7c6ff"/><stop offset="1" stop-color="#9aa0b8"/></linearGradient>
-      <linearGradient id="gGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe27a"/><stop offset="1" stop-color="#d99a1c"/></linearGradient>
-      <mask id="mBite" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100"><rect width="100" height="100" fill="#fff"/><circle cx="82" cy="54" r="9" fill="#000"/><circle cx="80" cy="67" r="8" fill="#000"/></mask>
-      <radialGradient id="gCore"><stop offset="0" stop-color="#fffbe0"/><stop offset=".55" stop-color="#ffc531"/><stop offset="1" stop-color="#b86e00"/></radialGradient>
-    </defs>
-  </svg>
 
   <div class="app">
     <header class="top">
-      <h1 class="logo-img"><img src="assets/logo.webp" alt="Bootleg Beasts" width="900" height="300"></h1>
-      <div class="badges">
-        <span class="badge">Free-play demo · no real money</span>
-        <span class="badge badge-rtp">RTP 96.00%</span>
+      <div class="top-left">
+        <button id="infoBtn" class="icon-btn" aria-label="Rules, paytable and math" title="Rules &amp; math">
+          <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <button id="historyBtn" class="icon-btn" aria-label="Game history" title="History">
+          <svg viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6M3 4v4h4M12 7.5V12l3 2"/></svg></button>
       </div>
-      <button id="muteBtn" class="icon-btn mute-btn" aria-label="Mute sound">🔊</button>
-      <button id="infoBtn" class="icon-btn" aria-label="Rules, paytable and math">i</button>
+      <h1 class="logo" aria-label="Bootleg Beasts">
+        <svg class="logo-svg" viewBox="0 0 580 196" aria-hidden="true">
+          <g transform="rotate(-4 270 100)">
+            <g class="lg-shadow"><text x="270" y="82">BOOTLEG</text><text x="270" y="176" class="big">BEASTS</text></g>
+            <g class="lg-main"><text x="270" y="82">BOOTLEG</text><text x="270" y="176" class="big">BEASTS</text></g>
+          </g>
+          <g class="lg-badge" transform="translate(528 66) rotate(14)">
+            <path d="M0 -30 L8 -18 L22 -22 L19 -8 L32 0 L19 8 L22 22 L8 18 L0 30 L-8 18 L-22 22 L-19 8 L-32 0 L-19 -8 L-22 -22 L-8 -18 Z" fill="#fff" stroke="#1a1320" stroke-width="5" stroke-linejoin="round"/>
+            <text class="lg-sticker" y="-2">100%</text><text class="lg-sticker" y="12">REAL!</text>
+          </g>
+        </svg>
+      </h1>
+      <div class="top-right">
+        <button id="settingsBtn" class="icon-btn" aria-label="Settings" title="Settings">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button>
+        <button id="muteBtn" class="icon-btn" aria-label="Mute sound" title="Sound"></button>
+      </div>
     </header>
 
     <main class="stage">
-      <div class="hud" id="hud" hidden>
-        <div class="hud-item hud-name">
-          <span class="hud-label"><span id="hudLvlNum">LVL 1</span> · Reactors <span class="pips"><i class="pip"></i><i class="pip"></i><i class="pip"></i></span></span>
-          <span id="hudLevel">Street Hunt</span>
+      <aside class="side">
+        <button id="buyBtn" class="buy-main"><span>BUY</span><b>BONUS</b></button>
+        <button id="huntBtn" class="hunt" aria-pressed="false">
+          <span class="hunt-top"><b>BONUS HUNT</b><i class="sw"></i></span>
+          <small id="huntSub">3× bet · bonus ~5× more often</small>
+        </button>
+      </aside>
+
+      <div class="board">
+        <div class="hud" id="hud" hidden>
+          <div class="hud-item hud-name">
+            <span class="hud-label"><span id="hudLvlNum">LVL 1</span><span class="pips"><i class="pip"></i><i class="pip"></i><i class="pip"></i></span></span>
+            <span id="hudLevel">Street Hunt</span>
+          </div>
+          <div class="hud-item"><span class="hud-label">Spins</span><span id="hudSpins"></span></div>
+          <div class="hud-item"><span class="hud-label">Multiplier</span><span id="hudMult">×1</span></div>
+          <div class="hud-item"><span class="hud-label">Bonus win</span><span id="hudTotal">0.00</span></div>
         </div>
-        <div class="hud-item"><span class="hud-label">Spins left</span><span id="hudSpins"></span></div>
-        <div class="hud-item"><span class="hud-label">Spin multiplier</span><span id="hudMult">×1</span></div>
-        <div class="hud-item"><span class="hud-label">Bonus win</span><span id="hudTotal">0.00</span></div>
+        <div class="grid-wrap">
+          <div class="grid" id="grid" aria-label="Reels, 5 by 5"></div>
+          <div class="ovl" id="ovl" aria-hidden="true"></div>
+          <div class="win-tag" id="winTag" hidden></div>
+          <div class="banner" id="banner" hidden><div class="banner-title" id="bannerTitle"></div><div class="banner-sub" id="bannerSub"></div></div>
+        </div>
+        <p class="ticker" id="ticker" aria-live="polite">Land 3 Capture Cores for the bonus.</p>
       </div>
-      <div class="grid-wrap">
-        <div class="grid" id="grid" aria-label="Reels, 5 by 5"></div>
-        <div class="ovl" id="ovl" aria-hidden="true"></div>
-        <div class="win-tag" id="winTag" hidden></div>
-        <div class="banner" id="banner" hidden><div class="banner-title" id="bannerTitle"></div><div class="banner-sub" id="bannerSub"></div></div>
-      </div>
-      <p class="ticker" id="ticker" aria-live="polite">Spin to start. Land 3 Capture Cores for a bonus.</p>
     </main>
 
-    <section class="controls" aria-label="Controls">
-      <div class="meters">
-        <div class="meter"><span class="label">Balance</span><span class="value" id="balance">1,000.00</span></div>
-        <div class="meter"><span class="label">Win</span><span class="value value-win" id="win">0.00</span></div>
+    <section class="bar" aria-label="Controls">
+      <div class="bar-left">
+        <div class="meter">
+          <span class="label">Balance</span>
+          <span class="value" id="balance">1,000.00</span>
+          <button id="refill" class="refill" title="Add 10,000 free credits" aria-label="Add 10,000 free credits">+</button>
+        </div>
+        <div class="meter bet">
+          <span class="label">Bet</span>
+          <span class="bet-row">
+            <button id="betDown" class="step" aria-label="Lower bet">−</button>
+            <span class="value" id="bet">1.00</span>
+            <button id="betUp" class="step" aria-label="Raise bet">+</button>
+          </span>
+        </div>
       </div>
-      <div class="bet">
-        <span class="label">Bet</span>
-        <button id="betDown" class="step" aria-label="Lower bet">−</button>
-        <span class="value" id="bet">1.00</span>
-        <button id="betUp" class="step" aria-label="Raise bet">+</button>
+      <div class="bar-mid">
+        <span class="label">Win</span>
+        <span class="value value-win" id="win">0.00</span>
       </div>
-      <button id="spinBtn" class="spin" aria-label="Spin (space bar)">SPIN</button>
-      <div class="buys">
-        <button id="buy0" class="buy"><span id="buyName0">Buy Street Hunt</span><b id="buyCost0"></b></button>
-        <button id="buy1" class="buy buy-raid"><span id="buyName1">Buy Night Raid</span><b id="buyCost1"></b></button>
-        <button id="buy2" class="buy buy-lock"><span id="buyName2">Buy Lockdown</span><b id="buyCost2"></b></button>
+      <div class="bar-right">
+        <label class="round-btn turbo" title="Turbo spin">
+          <input type="checkbox" id="turbo" aria-label="Turbo spin">
+          <svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+        </label>
+        <button id="spinBtn" class="spin" aria-label="Spin (space bar)">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M38 20A15 15 0 0 0 11.5 14.5M10 28a15 15 0 0 0 26.5 5.5"/><path class="tip" d="M12 6v9h9M36 42v-9h-9"/></svg>
+        </button>
+        <button id="autoBtn" class="round-btn auto-btn" aria-label="Autoplay" title="Autoplay"></button>
+        <small class="spin-stake" id="spinStake"></small>
       </div>
-      <div class="toggles">
-        <label class="toggle"><input type="checkbox" id="turbo"> Turbo</label>
-        <label class="toggle"><input type="checkbox" id="auto"> Autoplay</label>
-      </div>
-      <button id="refill" class="refill">+ Add 10,000 free credits</button>
-      <dl class="session">
-        <div><dt>Spins</dt><dd id="sSpins">0</dd></div>
-        <div><dt>Wagered</dt><dd id="sBet">0.00</dd></div>
-        <div><dt>Won</dt><dd id="sWon">0.00</dd></div>
-        <div><dt>Session RTP</dt><dd id="sRtp">–</dd></div>
-      </dl>
     </section>
 
-    <footer class="foot">
-      <span>Portfolio project. Virtual credits only, no real-money play.</span>
-      <a id="repoLink" href="#" hidden>Source code &amp; math model on GitHub</a>
-      <a href="selftest.html">Engine self-test</a>
+    <footer class="statusline" aria-label="Session">
+      <span title="Local time"><b id="clock">--:--</b></span>
+      <span>Session <b id="sessTime">0:00</b></span>
+      <span>Net <b id="sessNet">0.00</b></span>
+      <span class="wide">Spins <b id="sSpins">0</b></span>
+      <span class="wide">Wagered <b id="sBet">0.00</b></span>
+      <span class="wide">Won <b id="sWon">0.00</b></span>
+      <span class="wide">Session RTP <b id="sRtp">–</b></span>
+      <span class="sep"></span>
+      <span class="badge-rtp" id="rtpBadge">RTP 96.00%</span>
+      <span>Free play · no real money</span>
+      <a id="repoLink" href="#" hidden>Source &amp; math</a>
+      <a href="selftest.html">Self-test</a>
     </footer>
   </div>
 
@@ -102,6 +126,6 @@
     <div id="infoBody"></div>
   </dialog>
 
-  <script type="module" src="app.js?v=11"></script>
+  <script type="module" src="app.js?v=13"></script>
 </body>
 </html>

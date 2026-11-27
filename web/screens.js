@@ -1,6 +1,6 @@
 // Full-screen bonus moments: the intro with the level ladder, level-up takeovers and the
 // count-up total at the end. Each one resolves when the player clicks (or after a timeout).
-import { symbolHTML } from "./symbols.js?v=11";
+import { symbolHTML } from "./symbols.js?v=13";
 
 const RUNG_TEXT = ["Wild columns · beast captures", "Bigger captures", "Columns lock wild", "Crosses · columns + wilds lock"];
 const TIERS = [

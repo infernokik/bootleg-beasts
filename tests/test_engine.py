@@ -6,6 +6,7 @@ from numba import njit
 
 from bootleg_beasts import engine, exact
 from bootleg_beasts.config import (
+    BASE_WILD_MULT_MEAN,
     CODE_TO_ID,
     CORE,
     H1,
@@ -236,13 +237,29 @@ CONFIGS = [(0, frozenset(), None), (1 << 1, frozenset({2}), H1), (1 << 4, frozen
            (0b1001, frozenset({1, 3}), WILD)]
 
 
+@pytest.mark.parametrize("weight", [1.0, BASE_WILD_MULT_MEAN])
 @pytest.mark.parametrize("R,cross,reveal", CONFIGS)
-def test_factorised_formula_matches_full_cycle(R, cross, reveal):
+def test_factorised_formula_matches_full_cycle(R, cross, reveal, weight):
     m = tiny_model()
-    Ec, P0 = exact.count_tables(m.base, reveal)
+    Ec, P0 = exact.count_tables(m.base, reveal, weight)
     assert exact.expected_win(Ec, P0, PAYTABLE, R, cross) == pytest.approx(
-        exact.enumerate_base(m, R, cross, reveal)["rtp"], rel=1e-12
+        exact.enumerate_base(m, R, cross, reveal, wild_weight=weight)["rtp"], rel=1e-12
     )
+
+
+def test_base_wild_multipliers_average_to_their_mean():
+    """ways_win_base draws a multiplier per Glitch Wild; on average a wild counts its mean."""
+    g = np.full((REELS, ROWS), CORE, np.int8)  # non-paying filler
+    g[:, 0] = H1
+    g[1, 1] = WILD  # reel 2: one H1 and one wild
+    _seed(5)
+    n = 200_000
+    mean = np.mean([engine.ways_win_base(g, no_mask(), PAYTABLE, scratch()) for _ in range(n)])
+    expect = PAYTABLE[H1, 5] * (1 + BASE_WILD_MULT_MEAN)
+    assert mean == pytest.approx(expect, rel=0.01)
+    mask = no_mask()
+    mask[1, 1] = True  # under an Override the wild counts once
+    assert engine.ways_win_base(g, mask, PAYTABLE, scratch()) == pytest.approx(PAYTABLE[H1, 5] * 2)
 
 
 def test_full_cycle_matches_engine_evaluation():
@@ -261,7 +278,7 @@ def test_full_cycle_matches_engine_evaluation():
         g = np.stack([by_reel[r][s] for r, s in enumerate(stops)]).astype(np.int8)
         g[g == STATIC] = reveal
         wins.append(win(g, mask))
-    assert np.mean(wins) == pytest.approx(exact.enumerate_base(m, R, cross, reveal)["rtp"], rel=1e-12)
+    assert np.mean(wins) == pytest.approx(exact.enumerate_base(m, R, cross, reveal, wild_weight=1.0)["rtp"], rel=1e-12)
 
 
 def test_core_distribution():

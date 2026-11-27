@@ -45,14 +45,14 @@ def _bonus_args(model: Model, level_cum=None):
     return reels.strips, reels.lens, cum, rv_s, rv_c, mults, shapes, cap_v, cap_c, sticky_w, sticky_x
 
 
-def _game_args(model: Model):
+def _game_args(model: Model, reel_key: str = "base"):
     mults, shapes, sticky_w, sticky_x = level_arrays()
     cap_v, cap_c = capture_arrays()
     rb_s, rb_c, _ = model.reveal_table("base")
     rx_s, rx_c, _ = model.reveal_table("bonus")
     return (
-        model.base.strips, model.base.lens, model.reels["bonus"].strips, model.reels["bonus"].lens,
-        PAYTABLE, model.override_cum("base"), rb_s, rb_c, rx_s, rx_c, model.level_override_cum(),
+        model.reels[reel_key].strips, model.reels[reel_key].lens, model.reels["bonus"].strips, model.reels["bonus"].lens,
+        PAYTABLE, model.override_cum(reel_key if reel_key in model.override_weights else "base"), rb_s, rb_c, rx_s, rx_c, model.level_override_cum(),
         mults, shapes, cap_v, cap_c, sticky_w, sticky_x, start_by_cores(), FREE_SPINS, REACTORS_PER_LEVEL, LEVEL_UP_SPINS,
         MIN_WINS, MAX_WIN,
     )
@@ -121,11 +121,11 @@ def payout_profile(wins: np.ndarray, price: float) -> dict:
     }
 
 
-def run_game(model: Model, n_spins: int, seed: int = 1, chunk_size: int = 500_000) -> dict:
+def run_game(model: Model, n_spins: int, seed: int = 1, chunk_size: int = 500_000, reel_key: str = "base") -> dict:
     """Simulate `n_spins` full game rounds and return totals, splits and per-chunk sums."""
     n_chunks = _chunks(n_spins, chunk_size)
     (tot, sq, base, cross, reveal, bonus, trig, reach, hits, drops, reveals, maxw, hist,
-     hist_win) = engine.simulate_game(n_chunks, chunk_size, seed, *_game_args(model)[:-1], MAX_WIN,
+     hist_win) = engine.simulate_game(n_chunks, chunk_size, seed, *_game_args(model, reel_key)[:-1], MAX_WIN,
                                       WIN_BUCKET_EDGES)
     n = n_chunks * chunk_size
     mean = tot.sum() / n

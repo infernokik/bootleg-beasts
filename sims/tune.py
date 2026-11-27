@@ -20,7 +20,7 @@ import time
 import numpy as np
 
 from bootleg_beasts import exact, sim
-from bootleg_beasts.config import BUYS, LEVELS, MODEL_PATH, REELS, Model, ReelSet
+from bootleg_beasts.config import ANTE_KEY, ANTE_PRICE, BUYS, FEATURE_KEY, LEVELS, MODEL_PATH, REELS, Model, ReelSet
 from bootleg_beasts.reelgen import build_strip
 
 TARGET_RTP = 0.9600
@@ -41,6 +41,9 @@ REEL_SETS = {
     "base": (BASE_STACKS, [{"S": 1}] + [{"W": 1, "S": 1}] * 4, 11),
     # Reactors on reels 1-4, one Glitch Wild on reels 2-5
     "bonus": (BONUS_STACKS, [{"R": 1}] + [{"W": 1, "R": 1}] * 3 + [{"W": 1}], 101),
+    # Bonus Hunt (ante): the base composition with two Capture Cores on reels 1-4 (kept 5+ stops
+    # apart, so still at most one per window) and one on reel 5: about 5x the bonus odds
+    "hunt": (BASE_STACKS, [{"S": 2}] + [{"W": 1, "S": 2}] * 3 + [{"W": 1, "S": 1}], 11),
 }
 REVEAL_WEIGHTS = {
     "base": {"H1": 3, "H2": 4, "H3": 5, "H4": 6, "L1": 9, "L2": 9, "L3": 10, "L4": 10, "L5": 11, "W": 1},
@@ -82,7 +85,11 @@ def tune_bonus(model, target_ev, lo=0.0, hi=0.9):
     q1 = q0 * 1.03
     e0 = bonus_ev(model, q0, 8_000_000, 31_337)
     e1 = bonus_ev(model, q1, 8_000_000, 31_337)
-    return q0 + (target_ev - e0) * (q1 - q0) / (e1 - e0)
+    for _ in range(2):  # secant steps on common random numbers
+        q2 = q1 + (target_ev - e1) * (q1 - q0) / (e1 - e0)
+        q0, e0 = q1, e1
+        q1, e1 = q2, bonus_ev(model, q2, 8_000_000, 31_337)
+    return q1
 
 
 def main() -> None:
@@ -99,7 +106,7 @@ def main() -> None:
           ", ".join(f"{lv.name} {q * lv.override_factor:.4f}" for lv in LEVELS[1:]))
 
     evs, cis = [], []
-    for lvl, lv in enumerate(LEVELS[:3]):
+    for lvl, lv in enumerate(LEVELS):
         r = sim.run_bonus(model, lvl, 10_000_000, seed=2024 + lvl)
         evs.append(r["mean_win"])
         cis.append(r["ci95"])
@@ -112,7 +119,7 @@ def main() -> None:
 
     ex = exact.base_game_exact(model)
     p_trig = np.array(ex["p_trigger"])
-    bonus_rtp = float(p_trig @ np.array(evs))
+    bonus_rtp = float(p_trig @ np.array(evs[:3]))
     e0, e1 = ex["rtp_no_override"], ex["mean_win_one_override"]
     q_base = (TARGET_RTP - bonus_rtp - e0) / (e1 - e0)
     print(f"Base, exact: no-Override RTP {e0:.4%}, one-Override mean {e1:.1f}x, "
@@ -121,10 +128,29 @@ def main() -> None:
         raise SystemExit(f"base drop rate {q_base:.5f} is out of range: change the base reels")
     model.override_weights["base"] = weights(q_base)
     ex = exact.base_game_exact(model)
-    ci = float(np.sqrt(np.sum((p_trig * np.array(cis)) ** 2)))
+    ci = float(np.sqrt(np.sum((p_trig * np.array(cis[:3])) ** 2)))
     print(f"Base Override drop: 1 in {1 / q_base:,.0f} spins")
     print(f"RTP = base {ex['rtp_base_ways']:.4%} (exact) + bonus {bonus_rtp:.4%} = "
           f"{ex['rtp_base_ways'] + bonus_rtp:.4%} +/- {ci:.4%}")
+    # Override Spin: guaranteed cross; EV = exact mean win with one Override + the usual bonus part
+    ev_fs = ex["mean_win_one_override"] + bonus_rtp
+    model.buy_prices[FEATURE_KEY] = float(round(ev_fs / TARGET_BUY_RTP, 1))
+    print(f"Override Spin price {model.buy_prices[FEATURE_KEY]:.1f}x (RTP {ev_fs / model.buy_prices[FEATURE_KEY]:.3%})")
+    # Bonus Hunt ante: fixed price; solve its own Override rate exactly so it returns TARGET_RTP
+    model.override_weights[ANTE_KEY] = weights(0.0)
+    exh = exact.base_game_exact(model, reel_key=ANTE_KEY)
+    ph = np.array(exh["p_trigger"])
+    bonus_h = float(ph @ np.array(evs[:3]))
+    e0h, e1h = exh["rtp_no_override"], exh["mean_win_one_override"]
+    q_h = (TARGET_RTP * ANTE_PRICE - bonus_h - e0h) / (e1h - e0h)
+    if not 0 < q_h < 0.1:
+        raise SystemExit(f"Bonus Hunt drop rate {q_h:.5f} is out of range: change the hunt reels")
+    model.override_weights[ANTE_KEY] = weights(q_h)
+    model.buy_prices[ANTE_KEY] = ANTE_PRICE
+    exh = exact.base_game_exact(model, reel_key=ANTE_KEY)
+    print(f"Bonus Hunt ({ANTE_PRICE:g}x bet): bonus odds 1 in {1 / ph[0]:,.0f} / {1 / ph[1]:,.0f} / "
+          f"{1 / ph[2]:,.0f}, Override 1 in {1 / q_h:,.0f} spins, RTP "
+          f"{(exh['rtp_base_ways'] + bonus_h) / ANTE_PRICE:.4%}")
     model.save(MODEL_PATH)
     print(f"Saved {MODEL_PATH}  ({time.perf_counter() - t0:.0f}s)")
 

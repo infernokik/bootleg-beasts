@@ -19,7 +19,10 @@ from pathlib import Path
 import numpy as np
 
 from bootleg_beasts import exact, sim
-from bootleg_beasts.config import BUYS, LEVELS, MAX_WIN, WIN_BUCKET_EDGES, Model
+import copy
+
+from bootleg_beasts.config import (ANTE_KEY, ANTE_NAME, ANTE_PRICE, BUYS, FEATURE_KEY, FEATURE_NAME, LEVELS,
+                                  MAX_WIN, WIN_BUCKET_EDGES, Model)
 
 REPORTS = Path(__file__).resolve().parent.parent / "reports"
 
@@ -119,6 +122,29 @@ def main() -> None:
                        "net_hist_edges": np.histogram(net, bins=60)[1].tolist()}
     print(f"[sessions] {net.size:,} players x {paths.shape[1]} spins: {np.mean(net > 0):.1%} finish ahead, "
           f"median {np.median(net):+.0f}")
+
+    # 4. Bonus Hunt (ante) and Override Spin: exact parts vs an independent full-game simulation
+    def mode_check(name, price, ev_parts, ci_parts, g):
+        rtp_sim, ci_sim = g["rtp"] / price, g["ci95"] / price
+        zz = (rtp_sim - ev_parts / price) / np.hypot(ci_sim / sim.Z95, ci_parts / price / sim.Z95)
+        print(f"[mode]  {name:14s} {price:g}x: RTP {ev_parts / price:.4%} (parts) vs {rtp_sim:.4%} +/- {ci_sim:.4%} "
+              f"over {g['spins']:.3g} spins (z = {zz:+.2f}); sd {g['std'] / price:.2f}x stake")
+        return {"name": name, "price": price, "rtp": ev_parts / price, "rtp_ci95": ci_parts / price,
+                "rtp_sim": rtp_sim, "rtp_sim_ci95": ci_sim, "z": float(zz), "spins": g["spins"],
+                "sd_per_stake": g["std"] / price, "hit_rate": g["hit_rate"]}
+
+    exh = exact.base_game_exact(model, reel_key=ANTE_KEY)
+    ph = np.array(exh["p_trigger"])
+    gh = sim.run_game(model, int(args.spins) // 4, seed=args.seed + 5, chunk_size=1_000_000, reel_key=ANTE_KEY)
+    out["ante"] = mode_check(ANTE_NAME, ANTE_PRICE, exh["rtp_base_ways"] + float(ph @ np.array(evs)),
+                             float(np.sqrt(np.sum((ph * np.array(cis)) ** 2))), gh)
+    out["ante"] |= {"key": ANTE_KEY, "p_trigger": exh["p_trigger"], "override_prob": exh["override_probs"][1]}
+    forced = copy.deepcopy(model)
+    forced.override_weights["base"] = [0, 1, 0]
+    gf = sim.run_game(forced, int(args.spins) // 40, seed=args.seed + 6, chunk_size=200_000)
+    price_f = model.buy_prices[FEATURE_KEY]
+    out["feature_spin"] = mode_check(FEATURE_NAME, price_f, ex["mean_win_one_override"] + float(p_trig @ np.array(evs)),
+                                     ci_split, gf) | {"key": FEATURE_KEY}
 
     (REPORTS / "results.json").write_text(json.dumps(out, indent=1, default=float), encoding="utf-8")
     print(f"Saved {REPORTS / 'results.json'}")

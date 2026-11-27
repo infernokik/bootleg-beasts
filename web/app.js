@@ -1,11 +1,12 @@
 // Bootleg Beasts: browser UI. Every outcome comes from engine.js, which uses the same reel strips,
 // weights and rules as the verified Python model (game-data.json).
-import { Game, CORE, REACTOR } from "./engine.js?v=11";
-import { symbolHTML } from "./symbols.js?v=11";
-import { Fx, shake, glitchHit } from "./fx.js?v=11";
-import { startBackground } from "./background.js?v=11";
-import { sfx, music, isMuted, setMuted } from "./sfx.js?v=11";
-import { intro, levelUp, outro } from "./screens.js?v=11";
+import { Game, CORE, REACTOR } from "./engine.js?v=13";
+import { symbolHTML } from "./symbols.js?v=13";
+import { Fx, shake, impact } from "./fx.js?v=13";
+import { startBackground } from "./background.js?v=13";
+import { sfx, music, isMuted, setMuted, audioPrefs, setAudioPrefs } from "./sfx.js?v=13";
+import { splash, buyMenu, autoplayMenu, settingsMenu, historyMenu, realityCheck } from "./panels.js?v=13";
+import { intro, levelUp, outro } from "./screens.js?v=13";
 
 try {
   startBackground(document.getElementById("bg"));
@@ -23,6 +24,7 @@ const BETS = [0.2, 0.5, 1, 2, 5, 10, 20];
 const START_BALANCE = 1000;
 const REFILL = 10000;
 const BIG_WIN = 25; // x bet
+const LEVEL_SHORT = ["wild columns and beast captures", "bigger captures", "Override columns lock wild"];
 const LEVEL_TEXT = [
   "Override Wilds turn their column wild · captured beasts add +1–2×",
   "Captures hit harder · more +2× beasts",
@@ -30,14 +32,21 @@ const LEVEL_TEXT = [
   "Full Override CROSSES · columns and Glitch Wilds LOCK · captures up to +3×",
 ];
 
+const ICON = {
+  auto: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"/><path d="M18 3v4h-4M6 21v-4h4"/><path class="fill" d="M10 9.5v5l4-2.5z"/></svg>',
+  soundOn: '<svg viewBox="0 0 24 24"><path class="fill" d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>',
+  soundOff: '<svg viewBox="0 0 24 24"><path class="fill" d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9.5l5 5M22 9.5l-5 5"/></svg>',
+};
+
 // ---- State & helpers -----------------------------------------------------------
 const $ = (id) => document.getElementById(id);
 const ui = {
   grid: $("grid"), wrap: document.querySelector(".grid-wrap"), ovl: $("ovl"), banner: $("banner"),
   bannerTitle: $("bannerTitle"), bannerSub: $("bannerSub"), winTag: $("winTag"), ticker: $("ticker"),
   balance: $("balance"), win: $("win"), bet: $("bet"), spin: $("spinBtn"), betUp: $("betUp"),
-  betDown: $("betDown"), buys: [$("buy0"), $("buy1"), $("buy2")], buyCosts: [$("buyCost0"), $("buyCost1"), $("buyCost2")],
-  buyNames: [$("buyName0"), $("buyName1"), $("buyName2")], turbo: $("turbo"), auto: $("auto"), refill: $("refill"),
+  betDown: $("betDown"), turbo: $("turbo"), autoBtn: $("autoBtn"), buyBtn: $("buyBtn"), huntBtn: $("huntBtn"),
+  spinStake: $("spinStake"), clock: $("clock"), sessTime: $("sessTime"), sessNet: $("sessNet"),
+  historyBtn: $("historyBtn"), settingsBtn: $("settingsBtn"), rtpBadge: $("rtpBadge"), refill: $("refill"),
   hud: $("hud"), hudName: document.querySelector(".hud-name"), hudLevel: $("hudLevel"), hudLvlNum: $("hudLvlNum"), pips: [...document.querySelectorAll(".pip")],
   hudSpins: $("hudSpins"), hudMult: $("hudMult"), hudTotal: $("hudTotal"), info: $("info"),
   infoBody: $("infoBody"), infoBtn: $("infoBtn"), mute: $("muteBtn"), sSpins: $("sSpins"),
@@ -64,10 +73,20 @@ const S = {
   balance: store.get("balance", START_BALANCE),
   betIdx: Math.min(store.get("betIdx", 2), BETS.length - 1),
   busy: false, spins: 0, wagered: 0, won: 0,
+  hunt: store.get("hunt", false), // Bonus Hunt ante mode
+  auto: null, // autoplay: { left, lossLimit, winLimit, stopOnBonus, startNet }
+  history: [],
+  start: Date.now(),
+  lastReality: Date.now(),
+  prefs: { splash: true, realityMins: 30, ...store.get("prefs", {}) },
 };
+const autoOn = () => !!S.auto;
 const round2 = (x) => Math.round(x * 100) / 100;
 const fmt = (x) => x.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const bet = () => BETS[S.betIdx];
+/** What one spin costs: the bet, or the bet x the ante price in Bonus Hunt. */
+const stake = () => round2(bet() * (S.hunt ? data.ante.price : 1));
+const signed = (x) => `${x >= 0 ? "+" : "−"}${fmt(Math.abs(x))}`;
 const speed = () => (ui.turbo.checked ? 0.35 : 1);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms * speed()));
 const bump = (el) => {
@@ -134,7 +153,7 @@ function clearFx(keepSticky = false) {
   for (const col of cells) for (const c of col) c.classList.remove("win", "land", "focus");
   for (const col of ocells) {
     for (const o of col) {
-      o.classList.remove("win", "wildcell", "ow-drop", "core-hit", "lock-in", "captured", "reactor-hit", "focus");
+      o.classList.remove("win", "wildcell", "ow-drop", "core-hit", "lock-in", "captured", "reactor-hit", "focus", "wm-on");
       o.style.removeProperty("--d");
       if (!keepSticky) o.classList.remove("sticky", "ow-origin");
       if (!o.classList.contains("sticky")) o.replaceChildren();
@@ -250,7 +269,7 @@ async function showReveal(reveal) {
     void c.offsetWidth;
     c.classList.add("land");
     const [x, y] = fx.at(ocells[r][k]);
-    fx.burst(x, y, { n: 10, colors: ["#21f0ff", "#ff2bd6", "#fff"], speed: 3, size: 3, life: 30 });
+    fx.burst(x, y, { n: 10, colors: ["#ffb347", "#fff3d6", "#fff"], speed: 3, size: 3, life: 30 });
   }
   tick(`<b>Static revealed ${NAMES[reveal.sym]}!</b> (${reveal.cells.length} symbol${reveal.cells.length > 1 ? "s" : ""})`);
   await sleep(450);
@@ -293,7 +312,7 @@ async function showCaptures(captures) {
     const o = ocells[c.r][c.k];
     o.classList.add("captured");
     const [x, y] = fx.at(o);
-    fx.burst(x, y, { n: 26, colors: ["#ffc531", "#fff1a8", "#ff2bd6"], speed: 5, size: 4, life: 40 });
+    fx.burst(x, y, { n: 26, colors: ["#ffc531", "#fff1a8", "#ff3b3b"], speed: 5, size: 4, life: 40 });
     pop(`+${c.value}×`, x, y);
     sfx.capture(i);
     ui.hudMult.textContent = `×${mult}`;
@@ -380,27 +399,35 @@ function credit(amount) {
 function render() {
   ui.balance.textContent = fmt(S.balance);
   ui.bet.textContent = fmt(bet());
-  data.buys.forEach((b, i) => {
-    ui.buyNames[i].textContent = `Buy ${b.name}`;
-    ui.buyCosts[i].textContent = fmt(b.price * bet());
-  });
+  ui.spinStake.textContent = S.hunt ? `${fmt(stake())} · Hunt` : fmt(stake());
+  ui.huntBtn.setAttribute("aria-pressed", String(S.hunt));
+  ui.huntBtn.classList.toggle("on", S.hunt);
+  document.body.classList.toggle("hunt-on", S.hunt);
+  ui.huntBtn.disabled = S.busy;
+  ui.buyBtn.disabled = S.busy;
+  ui.autoBtn.innerHTML = S.auto ? `<b>${S.auto.left}</b>` : ICON.auto;
+  ui.autoBtn.setAttribute("aria-label", S.auto ? `Stop autoplay (${S.auto.left} left)` : "Autoplay");
+  ui.autoBtn.classList.toggle("on", !!S.auto);
+  ui.spin.classList.toggle("hunt", S.hunt);
+  ui.spin.classList.toggle("busy", S.busy);
+  ui.autoBtn.disabled = S.busy && !S.auto;
+  ui.sessNet.textContent = signed(round2(S.won - S.wagered));
   ui.sSpins.textContent = S.spins.toLocaleString();
   ui.sBet.textContent = fmt(S.wagered);
   ui.sWon.textContent = fmt(S.won);
   ui.sRtp.textContent = S.wagered ? `${((100 * S.won) / S.wagered).toFixed(1)}%` : "–";
-  const canSpin = S.balance >= bet() - 1e-9;
+  const canSpin = S.balance >= stake() - 1e-9;
   ui.refill.disabled = S.busy;
   ui.refill.classList.toggle("urgent", !canSpin && !S.busy);
   ui.spin.disabled = S.busy || !canSpin;
   ui.betUp.disabled = S.busy || S.betIdx >= BETS.length - 1;
   ui.betDown.disabled = S.busy || S.betIdx <= 0;
-  ui.buys.forEach((el, i) => (el.disabled = S.busy || S.balance < data.buys[i].price * bet() - 1e-9));
   store.set("balance", S.balance);
   store.set("betIdx", S.betIdx);
 }
 
 /** Show every winning cell, then (if there's more than one win) walk through each win in turn. */
-async function showWins(lines, mult, winX, b) {
+async function showWins(lines, mult, winX, b, price = 1) {
   ui.grid.classList.add("has-win");
   const hit = new Set();
   for (const l of lines) {
@@ -410,16 +437,16 @@ async function showWins(lines, mult, winX, b) {
       hit.add(r * K + k);
     }
   }
-  sfx.win(winX);
+  if (winX > price) sfx.win(winX / price); // a return at or below the stake is not celebrated
   const per = Math.max(2, Math.min(9, Math.round(150 / hit.size)));
   for (const id of hit) {
     const [x, y] = fx.at(ocells[Math.floor(id / K)][id % K]);
-    fx.burst(x, y, { n: per, colors: ["#b6ff3b", "#fff1a8", "#ffc531"], speed: 3.2, size: 3, life: 38, gravity: 0.1 });
+    fx.burst(x, y, { n: per, colors: ["#ffd21f", "#fff3d6", "#ff8a3d"], speed: 3.2, size: 3, life: 38, gravity: 0.1 });
   }
   tick(lines.slice(0, 2).map((l) => lineText(l, mult, b)).join(" &nbsp;|&nbsp; ") +
     (lines.length > 2 ? ` &nbsp;+${lines.length - 2} more` : ""));
   await sleep(650);
-  if (lines.length > 1 && !ui.auto.checked) {
+  if (lines.length > 1 && !autoOn()) {
     for (const l of lines.slice(0, 4)) {
       const on = new Set(l.cells.map(([r, k]) => r * K + k));
       for (let r = 0; r < R; r++) {
@@ -445,7 +472,7 @@ async function showWins(lines, mult, winX, b) {
     shake(ui.wrap, winX >= 100 ? 12 : 8, 500);
     fx.fountain(winX >= 250 ? 220 : winX >= 100 ? 150 : 90);
     sfx.bigWin();
-    const title = winX >= 250 ? "EPIC WIN" : winX >= 100 ? "MEGA WIN" : "BIG WIN";
+    const title = winX >= 1000 ? "LEGENDARY WIN" : winX >= 250 ? "EPIC WIN" : winX >= 100 ? "MEGA WIN" : "BIG WIN";
     await countBanner(title, round2(winX * b), 2400, winX >= 100 ? "gold" : "");
   } else {
     await sleep(300);
@@ -514,10 +541,10 @@ async function runBonus(startLevel, cap) {
   ui.hudTotal.textContent = fmt(0);
   setCharged(0);
   sfx.bonus();
-  await glitchHit(600);
+  await impact(600);
   music.start(startLevel);
   await intro({ levels: data.levels, level: startLevel, spins: data.freeSpins, perLevel: data.reactorsPerLevel,
-    levelUpSpins: data.levelUpSpins, speed: speed(), auto: ui.auto.checked });
+    levelUpSpins: data.levelUpSpins, speed: speed(), auto: autoOn() });
   clearFx();
   while (!st.done) {
     clearFx(true);
@@ -569,12 +596,12 @@ async function runBonus(startLevel, cap) {
       hudPips(meterShown, false);
       setCharged(meterShown);
       sfx.levelUp();
-      await glitchHit(500);
+      await impact(500);
       hudLevel(lvl);
       music.setLevel(lvl);
       ui.hudSpins.textContent = st.spinsLeft - (res.levelUps - u - 1) * data.levelUpSpins;
       await levelUp({ levels: data.levels, level: lvl, levelUpSpins: data.levelUpSpins,
-        speed: speed(), auto: ui.auto.checked });
+        speed: speed(), auto: autoOn() });
     }
     if (st.level >= data.levels.length - 1) hudPips(3, true);
     ui.hudSpins.textContent = st.spinsLeft;
@@ -586,8 +613,9 @@ async function runBonus(startLevel, cap) {
   }
   music.stop();
   await outro({ levels: data.levels, level: st.level, totalX: st.total, bet: b, floored: st.floored, fmt, sfx,
-    speed: speed(), auto: ui.auto.checked });
+    speed: speed(), auto: autoOn() });
   setCharged(0);
+  music.start(-1);
   document.body.classList.remove("in-bonus");
   delete document.body.dataset.level;
   ui.hud.hidden = true;
@@ -602,29 +630,85 @@ async function maxWinBanner(b) {
   await banner("MAX WIN", `${fmt(round2(data.maxWin * b))} · ${data.maxWin.toLocaleString()}× bet`, 3000, "gold");
 }
 
-async function spin() {
+/** Base-game Glitch Wilds show their multipliers one by one. */
+async function showWildMults(list) {
+  for (const [i, [r, k, m]] of list.entries()) {
+    const o = ocells[r][k];
+    const tag = document.createElement("span");
+    tag.className = `wm wm-${m}`;
+    tag.textContent = `×${m}`;
+    o.appendChild(tag);
+    o.classList.add("wm-on");
+    sfx.capture(i + (m === 5 ? 5 : m === 3 ? 2 : 0));
+    const [x, y] = fx.at(o);
+    fx.burst(x, y, { n: 8 + m * 4, colors: m === 5 ? ["#ffc531", "#fff1a8", "#fff"] : ["#ff3b3b", "#ffd21f", "#fff"], speed: 3, size: 3, life: 30 });
+    await sleep(240);
+  }
+  if (list.length > 1) {
+    const prod = list.reduce((acc, [, , m]) => acc * m, 1);
+    tick(`Wild multipliers ${list.map(([, , m]) => `×${m}`).join(" ")}: up to <b>×${prod}</b> on a win through all of them.`);
+  }
+  await sleep(200);
+}
+
+function logRound(r) {
+  S.history.push({ t: Date.now(), ...r });
+  if (S.history.length > 100) S.history.shift();
+}
+
+function stopAuto(reason) {
+  if (!S.auto) return;
+  S.auto = null;
+  if (reason) tick(`Autoplay stopped: ${reason}.`);
+  render();
+}
+
+function continueAuto(winAmount) {
+  if (!S.auto) return;
+  const a = S.auto;
+  a.left--;
+  const loss = a.startNet - (S.won - S.wagered);
+  if (a.left <= 0) return stopAuto("all spins played");
+  if (a.lossLimit && loss >= a.lossLimit - 1e-9) return stopAuto("loss limit reached");
+  if (a.winLimit && winAmount >= a.winLimit - 1e-9) return stopAuto("single-win limit reached");
+  if (S.balance < stake() - 1e-9) return stopAuto("not enough credits");
+  render();
+  setTimeout(() => S.auto && spin(), 380 * speed());
+}
+
+function spin() {
+  return S.hunt
+    ? playRound({ mode: data.ante.reelSet, price: data.ante.price, label: data.ante.name })
+    : playRound({ mode: "base", price: 1, label: "Spin" });
+}
+
+/** One paid base-game round: a normal spin, a Bonus Hunt spin, or an Override Spin. */
+async function playRound({ mode, price, forceOverride = false, label }) {
   if (S.busy) return;
   const b = bet();
-  if (S.balance < b - 1e-9) {
-    ui.auto.checked = false;
+  const cost = round2(price * b);
+  if (S.balance < cost - 1e-9) {
+    stopAuto("not enough credits");
     render();
     return;
   }
   S.busy = true;
-  S.balance = round2(S.balance - b);
+  S.balance = round2(S.balance - cost);
   S.spins++;
-  S.wagered = round2(S.wagered + b);
+  S.wagered = round2(S.wagered + cost);
   setWin(0);
   render();
   clearFx();
 
-  const res = game.baseSpin();
-  await spinReels("base", res.landed, res.stops, null);
+  const res = game.baseSpin({ mode, forceOverride });
+  await spinReels(mode, res.landed, res.stops, null);
   await showReveal(res.reveal);
   if (res.drops.length) await showDrops(res.drops, 2, null);
+  if (res.wildMults.length) await showWildMults(res.wildMults);
   let totalX = res.win;
+  let note = forceOverride ? label : "";
   if (res.win > 0) {
-    await showWins(res.lines, 1, res.win, b);
+    await showWins(res.lines, 1, res.win, b, price);
     credit(round2(res.win * b));
     setWin(round2(res.win * b));
     render();
@@ -632,6 +716,7 @@ async function spin() {
     tick(res.cores ? `${res.cores} Capture Core${res.cores > 1 ? "s" : ""}. Land 3 for the bonus.` : "No win.");
   }
   if (res.startLevel >= 0) {
+    if (S.auto && S.auto.stopOnBonus) stopAuto("bonus triggered");
     coreHit(res.landed);
     sfx.core();
     tick(`<b>${res.cores} Capture Cores!</b> Bonus starts on level ${res.startLevel + 1}.`);
@@ -639,15 +724,38 @@ async function spin() {
     const st = await runBonus(res.startLevel, data.maxWin - res.win);
     totalX += st.total;
     credit(round2(st.total * b));
+    note = `${res.cores} Cores · reached ${data.levels[st.level].name}`;
   }
   if (totalX >= data.maxWin - 1e-9) await maxWinBanner(b);
-  setWin(round2(totalX * b));
+  const amount = round2(totalX * b);
+  setWin(amount);
+  logRound({ mode: label, stake: cost, win: amount, note });
   S.busy = false;
   render();
-  if (ui.auto.checked) {
-    if (S.balance >= bet() - 1e-9) setTimeout(spin, 380 * speed());
-    else ui.auto.checked = false;
-  }
+  continueAuto(amount);
+}
+
+function featureSpin() {
+  return playRound({ mode: "base", price: data.featureSpin.price, forceOverride: true, label: data.featureSpin.name });
+}
+
+async function openBuyMenu() {
+  if (S.busy) return;
+  stopAuto();
+  const s = data.stats || {};
+  const items = [
+    { key: data.featureSpin.key, name: data.featureSpin.name, price: data.featureSpin.price, icon: "OW", vol: 2,
+      text: "One base spin with a guaranteed Override Wild cross.", rtp: s.featureSpin?.rtp },
+    ...data.buys.map((bb) => ({
+      key: bb.key, name: bb.name, price: bb.price, icon: "S", level: bb.startLevel, vol: 3 + bb.startLevel,
+      text: `${data.freeSpins} free spins starting on level ${bb.startLevel + 1}: ${LEVEL_SHORT[bb.startLevel]}.`,
+      rtp: s.buyRtp?.[bb.key], min: data.minBonusWin[bb.startLevel],
+    })),
+  ];
+  const key = await buyMenu({ items, bet: bet(), balance: S.balance, fmt });
+  if (!key) return;
+  if (key === data.featureSpin.key) return featureSpin();
+  return buyBonus(data.buys.findIndex((bb) => bb.key === key));
 }
 
 async function buyBonus(i) {
@@ -656,7 +764,7 @@ async function buyBonus(i) {
   const cost = round2(buy.price * b);
   if (S.busy || S.balance < cost - 1e-9) return;
   sfx.click();
-  ui.auto.checked = false;
+  stopAuto();
   S.busy = true;
   S.balance = round2(S.balance - cost);
   S.wagered = round2(S.wagered + cost);
@@ -671,6 +779,7 @@ async function buyBonus(i) {
   if (st.capped) await maxWinBanner(b);
   setWin(amount);
   tick(`<b>${buy.name}</b> paid <span class="amt">${fmt(amount)}</span> (${(st.total / buy.price).toFixed(2)}× the price).`);
+  logRound({ mode: `Buy ${buy.name}`, stake: cost, win: amount, note: `reached ${data.levels[st.level].name}` });
   S.busy = false;
   render();
 }
@@ -727,18 +836,23 @@ function buildInfo() {
       ${stat(s.hitRate ? pct(s.hitRate, 1) : "–", "Hit frequency")}
       ${stat(`${data.maxWin.toLocaleString()}×`, s.maxWinOdds ? `Max win · 1 in ${Math.round(s.maxWinOdds).toLocaleString()} spins` : "Max win")}
       ${stat(s.triggerOdds ? `1 in ${Math.round(s.triggerOdds[0])}` : "–", "Bonus frequency")}
-      ${data.buys.map((bb) => stat(s.buyRtp ? pct(s.buyRtp[bb.key]) : "–", `${bb.name} (${bb.price}×) RTP`)).join("")}
+      ${stat(s.ante?.rtp ? pct(s.ante.rtp) : "–", `${data.ante.name} (${data.ante.price}× bet) RTP`)}
+      ${stat(s.featureSpin?.rtp ? pct(s.featureSpin.rtp) : "–", `${data.featureSpin.name} (${data.featureSpin.price}×) RTP`)}
+      ${data.buys.map((bb) => stat(s.buyRtp ? pct(s.buyRtp[bb.key]) : "–", `${bb.name} buy (${bb.price}×) RTP`)).join("")}
+      ${stat(s.std ? `${s.std.toFixed(0)}×` : "–", "Volatility: very high (SD per spin)")}
     </div>
     <p>The base game is calculated exactly; the bonus is simulated tens of millions of times, and the
-    whole game a billion times as an independent check. <a href="selftest.html">Run the engine self-test.</a></p>
+    whole game billions of times as an independent check, in every mode. <a href="selftest.html">Run the engine self-test.</a></p>
     <h3>Paytable (bet ${fmt(b)}, pays per way)</h3>
-    <p>Beast frames show value: <b class="t-gold">gold</b> &gt; <b class="t-purple">purple</b> &gt;
-    <b class="t-blue">blue</b> &gt; <b class="t-green">green</b> &gt; items.</p>
+    <p>The four beasts pay the most, then the bootleg merch.</p>
     <table><thead><tr><th>Symbol</th><th>3</th><th>4</th><th>5</th></tr></thead><tbody>${rows}</tbody></table>
     <h3>Base game features</h3>
     <ul>
       <li><b>Static</b>: after every spin, all Static TVs on screen reveal the <b>same</b> random symbol (sometimes a Wild).</li>
-      <li><b>Glitch Wild</b> (reels 2–5) substitutes for every paying symbol.</li>
+      <li><b>Glitch Wild</b> (reels 2–5) substitutes for every paying symbol. In the base game every Glitch Wild
+      carries a <b>×2, ×3 or ×5</b> multiplier (weights ${data.wildMults.weights.join(" : ")}). A wild counts as that many
+      ways, so multipliers on the same win <b>multiply together</b>. Wilds revealed by Static and wilds under an
+      Override Wild count once (no multiplier).</li>
       <li><b>Override Wild</b> drops onto reels 2–4; its whole row and column turn wild.</li>
       <li><b>3, 4 or 5 Capture Cores</b> start the bonus on level 1, 2 or 3.</li>
     </ul>
@@ -751,15 +865,52 @@ function buildInfo() {
     </ol>
     <p>Guaranteed minimum bonus win: ${data.minBonusWin.slice(0, 3).map((m, i) => `${m}× from level ${i + 1}`).join(", ")}.
     Locked cells hide whatever lands under them.</p>
-    <h3>Bonus buys and max win</h3>
-    <p>${data.buys.map((bb) => `${bb.name}: ${bb.price}× bet (starts on level ${bb.startLevel + 1})`).join(" · ")}.
-    Maximum win <b>${data.maxWin.toLocaleString()}× bet</b> per round.</p>
+    <h3>Bonus Hunt</h3>
+    <p>Optional. Each spin costs <b>${data.ante.price}× bet</b> and plays on reels with extra Capture Cores: the bonus comes
+    about 1 in ${s.ante?.p_trigger ? Math.round(1 / s.ante.p_trigger[0]) : 70} spins instead of 1 in ${s.triggerOdds ? Math.round(s.triggerOdds[0]) : 342}.
+    Wins are paid on the bet, not the ante. RTP ${s.ante?.rtp ? pct(s.ante.rtp) : "96%"}.</p>
+    <h3>Buy feature</h3>
+    <p><b>${data.featureSpin.name}</b> (${data.featureSpin.price}× bet): one base spin with a guaranteed Override Wild cross.<br>
+    ${data.buys.map((bb) => `<b>${bb.name}</b>: ${bb.price}× bet, starts on level ${bb.startLevel + 1}`).join(" · ")}.
+    Overload can only be reached by collecting Reactors.</p>
+    <h3>Max win</h3>
+    <p>Maximum win <b>${data.maxWin.toLocaleString()}× bet</b> per round (base spin plus any bonus it triggers);
+    the round ends as soon as it's reached${s.maxWinOdds ? `, about 1 in ${Math.round(s.maxWinOdds).toLocaleString()} spins` : ""}.
+    A malfunction voids all pays and plays.</p>
     <p class="label">Free-play portfolio demo. Virtual credits have no cash value. Not a gambling product.</p>`;
 }
 
 // ---- Wiring ----------------------------------------------------------------------
 ui.spin.addEventListener("click", spin);
-ui.buys.forEach((el, i) => el.addEventListener("click", () => buyBonus(i)));
+ui.buyBtn.addEventListener("click", openBuyMenu);
+ui.huntBtn.addEventListener("click", () => {
+  if (S.busy) return;
+  S.hunt = !S.hunt;
+  store.set("hunt", S.hunt);
+  sfx.click();
+  tick(S.hunt ? `<b>Bonus Hunt on</b>: each spin costs ${fmt(stake())} (${data.ante.price}× bet) and the bonus comes about 5× more often.`
+    : "Bonus Hunt off.");
+  render();
+});
+ui.autoBtn.addEventListener("click", async () => {
+  if (S.auto) return stopAuto("stopped by player");
+  if (S.busy) return;
+  const a = await autoplayMenu({ fmt, stake: stake() });
+  if (!a) return;
+  S.auto = { ...a, left: a.spins, startNet: S.won - S.wagered };
+  render();
+  spin();
+});
+ui.historyBtn.addEventListener("click", () => historyMenu({ rounds: S.history, fmt }));
+ui.settingsBtn.addEventListener("click", async () => {
+  const cur = { ...audioPrefs(), turbo: ui.turbo.checked, splash: S.prefs.splash, realityMins: S.prefs.realityMins };
+  const out = await settingsMenu(cur);
+  setAudioPrefs(out);
+  ui.turbo.checked = out.turbo;
+  document.documentElement.style.setProperty("--t", speed());
+  S.prefs = { ...S.prefs, splash: out.splash, realityMins: out.realityMins };
+  store.set("prefs", S.prefs);
+});
 ui.betUp.addEventListener("click", () => {
   S.betIdx = Math.min(S.betIdx + 1, BETS.length - 1);
   sfx.click();
@@ -776,15 +927,13 @@ ui.refill.addEventListener("click", () => {
   render();
 });
 ui.turbo.addEventListener("change", () => document.documentElement.style.setProperty("--t", speed()));
-ui.auto.addEventListener("change", () => {
-  if (ui.auto.checked && !S.busy) spin();
-});
+
 ui.infoBtn.addEventListener("click", () => {
   buildInfo();
   ui.info.showModal();
 });
 const paintMute = () => {
-  ui.mute.textContent = isMuted() ? "🔇" : "🔊";
+  ui.mute.innerHTML = isMuted() ? ICON.soundOff : ICON.soundOn;
   ui.mute.setAttribute("aria-label", isMuted() ? "Unmute sound" : "Mute sound");
 };
 ui.mute.addEventListener("click", () => {
@@ -794,7 +943,7 @@ ui.mute.addEventListener("click", () => {
 });
 paintMute();
 document.addEventListener("keydown", (e) => {
-  if (e.code !== "Space" || ui.info.open) return;
+  if (e.code !== "Space" || document.querySelector("dialog[open]") || document.querySelector(".screen:not([hidden])")) return;
   e.preventDefault();
   spin();
 });
@@ -805,17 +954,51 @@ if (repo) {
   ui.repoLink.hidden = false;
 }
 
+// ---- Session status and reality check -----------------------------------------------
+const two = (n) => String(n).padStart(2, "0");
+let realityOpen = false;
+setInterval(async () => {
+  const now = new Date();
+  ui.clock.textContent = `${two(now.getHours())}:${two(now.getMinutes())}`;
+  const secs = Math.floor((now - S.start) / 1000);
+  ui.sessTime.textContent = secs >= 3600 ? `${Math.floor(secs / 3600)}:${two(Math.floor(secs / 60) % 60)}:${two(secs % 60)}`
+    : `${Math.floor(secs / 60)}:${two(secs % 60)}`;
+  const mins = S.prefs.realityMins;
+  if (mins && !realityOpen && !S.busy && now - S.lastReality >= mins * 60000) {
+    realityOpen = true;
+    stopAuto("reality check");
+    const go = await realityCheck({ minutes: Math.round((now - S.start) / 60000), net: round2(S.won - S.wagered), fmt });
+    S.lastReality = Date.now();
+    realityOpen = false;
+    if (!go) tick("Taking a break. Your balance is saved; come back any time.");
+  }
+}, 1000);
+if (data.stats?.rtp) ui.rtpBadge.textContent = `RTP ${(100 * data.stats.rtp).toFixed(2)}%`;
+
 // First screen: a random base-game window with the Static already revealed, no animation.
 const first = game.spinReels("base").grid;
 game.revealStatic(first, null, "base");
 for (let r = 0; r < R; r++) setColumn(r, first[r]);
 render();
+document.documentElement.style.setProperty("--t", speed());
+if (S.prefs.splash) {
+  splash(data).then(({ skip }) => {
+    if (skip) {
+      S.prefs.splash = false;
+      store.set("prefs", S.prefs);
+    }
+    music.start(-1); // the Play click unlocks audio
+  });
+} else {
+  addEventListener("pointerdown", () => music.start(-1), { once: true });
+}
 
 // ---- Debug hooks (only with ?debug in the URL) -------------------------------------------
 if (new URLSearchParams(location.search).has("debug")) {
   const baseCum = game.cum.base;
   window.bb = {
     game,
+    state: S,
     /** Play the bonus for free from a starting level (0-3). */
     async bonus(level = 0) {
       if (S.busy) return;
